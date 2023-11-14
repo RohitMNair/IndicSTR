@@ -1,0 +1,45 @@
+model:
+  name: grpembed # options resent, grpembed
+  version: 1 # null for grpembed
+  optimizer: adam
+  lr: 0.001
+  img_size: 224
+  
+data:
+  charset: ['क', 'क़', 'ख', 'ख़', 'ग़', 'ज़', 'ग', 'घ', 'ङ', 'ड़', 'च', 'छ', 'ज', 
+    'झ', 'ञ', 'ट', 'ठ', 'ड', 'ढ', 'ढ़', 'ण', 'त', 'थ', 'द', 'ध', 'न', 'ऩ', 
+    'प', 'फ', 'फ़', 'ब', 'भ', 'म', 'य', 'य़', 'र', 'ऱ', 'ल', 'ळ', 'ऴ', 'व', 
+    'श', 'ष', 'स', 'ह', 'ऋ', 'ॠ', 'ॸ', 'ॹ', 'ॺ', 'ॻ', 'ॼ', 'ॾ', 'ॿ', 
+    '०','१','२','३','४','५','६' ,'७' ,'८' ,'९', 
+    'अ', 'आ', 'इ', 'ई', 'उ', 'ऊ', 'ऌ', 'ॡ', 'ऋ', 'ॠ', 'ए', 'ऐ', 'ऎ', 'ऒ', 
+    'ओ', 'औ', 'अं', 'अ:', 'ॲ', 'ऍ', 'ऑ', 'ऄ', 'ॳ', 'ॴ', 'ॵ', 'ॶ', 'ॷ']
+  diacritics: ['ा','ि','ी','ु','ू','ृ','ॄ', 'ॢ', 'ॣ', 'े','ै', 'ॆ', 'ॊ', 'ो', 'ौ', 'ॏ', 'ऺ', 
+    '़', 'ॅ', 'ॉ', '्', 'ँ','ं','ः', 'ऻ', 'ॎ', '॑', '॒', '॓', '॔', 'ॕ', 'ॖ', 'ॗ', '॰', 'ॱ']
+  halfer: '्'
+  half_charset: ['क', 'क़', 'ख', 'ख़', 'ग़', 'ज़', 'ग', 'घ', 'ङ', 'ड़', 'च', 'छ', 'ज', 
+    'झ', 'ञ', 'ट', 'ठ', 'ड', 'ढ', 'ढ़', 'ण', 'त', 'थ', 'द', 'ध', 'न', 'ऩ', 
+    'प', 'फ', 'फ़', 'ब', 'भ', 'म', 'य', 'य़', 'र', 'ऱ', 'ल', 'ळ', 'ऴ', 'व', 
+    'श', 'ष', 'स', 'ह', 'ऋ', 'ॠ', 'ॸ', 'ॹ', 'ॺ', 'ॻ', 'ॼ', 'ॾ', 'ॿ']
+  train_img_dir: /home/nrohit/IndianSTR/devanagari_synth/vyanjan_synth
+  train_gt: /home/nrohit/IndianSTR/devanagari_synth/vyanjan_synth/gt.txt
+  val_img_dir:  /home/nrohit/IndianSTR/devanagari_synth/vyanjan_synth_test
+  val_gt: /home/nrohit/IndianSTR/devanagari_synth/vyanjan_synth_test/gt.txt
+  test_img_dir: null
+  test_gt: null
+  seperator: "\t"
+  batch_size: 128
+  num_workers: 48
+
+training:
+  device: cpu
+  chkpt_monitor: val_acc
+  chkpt_mode: max
+  stop_monitor: train_loss
+  stop_mode: min
+  check_val_every_n_epoch: 1
+  gradient_clip_val: 20
+  max_epochs: 20
+
+log:
+  log_dir: /home/nrohit/IndianSTR/CharEmbed/logs/
+
