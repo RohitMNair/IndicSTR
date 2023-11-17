@@ -1,45 +1,86 @@
-model:
-  name: grpembed # options resent, grpembed
-  version: 1 # null for grpembed
-  optimizer: adam
-  lr: 0.001
-  img_size: 224
-  
-data:
-  charset: ['क', 'क़', 'ख', 'ख़', 'ग़', 'ज़', 'ग', 'घ', 'ङ', 'ड़', 'च', 'छ', 'ज', 
+backbone: resnet
+
+defaults:
+  - model: resnet
+  - _self_
+
+Img2Vec:
+  _target_: model.Img2Vec.Img2Vec
+  character_classes: ['क', 'क़', 'ख', 'ख़', 'ग़', 'ज़', 'ग', 'घ', 'ङ', 'ड़', 'च', 'छ', 'ज', 
     'झ', 'ञ', 'ट', 'ठ', 'ड', 'ढ', 'ढ़', 'ण', 'त', 'थ', 'द', 'ध', 'न', 'ऩ', 
     'प', 'फ', 'फ़', 'ब', 'भ', 'म', 'य', 'य़', 'र', 'ऱ', 'ल', 'ळ', 'ऴ', 'व', 
     'श', 'ष', 'स', 'ह', 'ऋ', 'ॠ', 'ॸ', 'ॹ', 'ॺ', 'ॻ', 'ॼ', 'ॾ', 'ॿ', 
     '०','१','२','३','४','५','६' ,'७' ,'८' ,'९', 
     'अ', 'आ', 'इ', 'ई', 'उ', 'ऊ', 'ऌ', 'ॡ', 'ऋ', 'ॠ', 'ए', 'ऐ', 'ऎ', 'ऒ', 
     'ओ', 'औ', 'अं', 'अ:', 'ॲ', 'ऍ', 'ऑ', 'ऄ', 'ॳ', 'ॴ', 'ॵ', 'ॶ', 'ॷ']
-  diacritics: ['ा','ि','ी','ु','ू','ृ','ॄ', 'ॢ', 'ॣ', 'े','ै', 'ॆ', 'ॊ', 'ो', 'ौ', 'ॏ', 'ऺ', 
+  diacritic_classes: ['ा','ि','ी','ु','ू','ृ','ॄ', 'ॢ', 'ॣ', 'े','ै', 'ॆ', 'ॊ', 'ो', 'ौ', 'ॏ', 'ऺ', 
     '़', 'ॅ', 'ॉ', '्', 'ँ','ं','ः', 'ऻ', 'ॎ', '॑', '॒', '॓', '॔', 'ॕ', 'ॖ', 'ॗ', '॰', 'ॱ']
-  halfer: '्'
-  half_charset: ['क', 'क़', 'ख', 'ख़', 'ग़', 'ज़', 'ग', 'घ', 'ङ', 'ड़', 'च', 'छ', 'ज', 
+  half_character_classes: ['क', 'क़', 'ख', 'ख़', 'ग़', 'ज़', 'ग', 'घ', 'ङ', 'ड़', 'च', 'छ', 'ज', 
     'झ', 'ञ', 'ट', 'ठ', 'ड', 'ढ', 'ढ़', 'ण', 'त', 'थ', 'द', 'ध', 'न', 'ऩ', 
     'प', 'फ', 'फ़', 'ब', 'भ', 'म', 'य', 'य़', 'र', 'ऱ', 'ल', 'ळ', 'ऴ', 'व', 
     'श', 'ष', 'स', 'ह', 'ऋ', 'ॠ', 'ॸ', 'ॹ', 'ॺ', 'ॻ', 'ॼ', 'ॾ', 'ॿ']
-  train_img_dir: /home/nrohit/IndianSTR/devanagari_synth/vyanjan_synth
-  train_gt: /home/nrohit/IndianSTR/devanagari_synth/vyanjan_synth/gt.txt
-  val_img_dir:  /home/nrohit/IndianSTR/devanagari_synth/vyanjan_synth_test
-  val_gt: /home/nrohit/IndianSTR/devanagari_synth/vyanjan_synth_test/gt.txt
+  optimizer:
+    _partial_: true
+    _target_: torch.optim.Adam
+  lr: 0.001
+  threshold: 0.5
+  backbone: ${model}
+  rep_dim: 2048
+  activation:
+    _target_: torch.nn.ReLU
+    
+transforms:
+  rotation: 90
+  img_size: ${model.img_size}
+  
+datamodule:
+  _target_: data.module.DevanagariDataModule
+  charset: ${Img2Vec.character_classes}
+  diacritics: ${Img2Vec.diacritic_classes}
+  halfer: '्'
+  train_img_dir: ../devanagari_synth/vyanjan_synth
+  train_gt: ../devanagari_synth/vyanjan_synth/gt.txt
+  val_img_dir: ../devanagari_synth/vyanjan_synth_test
+  val_gt: ../devanagari_synth/vyanjan_synth_test/gt.txt
   test_img_dir: null
   test_gt: null
-  seperator: "\t"
+  delimiter: "\t"
   batch_size: 128
-  num_workers: 48
+  num_workers: 96
+
+logger:
+  _target_: lightning.pytorch.loggers.CSVLogger
+  save_dir: ./logs
+  name: Img2Vec_${backbone}_${model.version}
+  version: ${now:%Y-%m-%d}/${now:%H-%M-%S}
+
+model_checkpoint:
+  _target_: lightning.pytorch.callbacks.ModelCheckpoint
+  dirpath: ${logger.save_dir}/${logger.name}/${logger.version}/checkpoints
+  monitor: val_acc
+  mode: max
+  save_top_k: 3
+  save_last: true
+  
+early_stopping:
+  _target_: lightning.pytorch.callbacks.early_stopping.EarlyStopping
+  monitor: train_loss
+  mode: min
+  min_delta: 0.01
+  patience: 4
+  verbose: true
+  check_finite: true
 
 training:
-  device: cpu
-  chkpt_monitor: val_acc
-  chkpt_mode: max
-  stop_monitor: train_loss
-  stop_mode: min
+  _target_: lightning.pytorch.Trainer
+  accelerator: cpu
+  max_epochs: 20
   check_val_every_n_epoch: 1
   gradient_clip_val: 20
-  max_epochs: 20
+  precision: 64-true
+  log_every_n_steps: 5
+  logger: ${logger}
 
-log:
-  log_dir: /home/nrohit/IndianSTR/CharEmbed/logs/
-
+hydra:
+  run:
+    dir: ${logger.save_dir}/${logger.name}/${logger.version}

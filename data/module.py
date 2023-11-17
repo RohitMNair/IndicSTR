@@ -25,7 +25,7 @@ class DevanagariDataModule(pl.LightningDataModule):
     def __init__(self, train_img_dir: str, train_gt: str, val_img_dir: str, val_gt: str, 
                 charset:list, diacritics:list, halfer:str, test_img_dir:str = None, test_gt:str = None,
                 batch_size: int = 64, normalize = True, num_workers: int = 0,
-                transforms: transforms.Compose = None, seperator:str = ' ', drop_last = False):
+                transforms: transforms.Compose = None, delimiter:str = ' ', drop_last = False):
         super().__init__()
         self.train_img_dir = train_img_dir
         self.train_gt = train_gt
@@ -40,7 +40,7 @@ class DevanagariDataModule(pl.LightningDataModule):
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.drop_last = drop_last
-        self.seperator = seperator
+        self.delimiter = delimiter
         self.normalize = normalize
 
     def setup(self, stage):
@@ -51,7 +51,7 @@ class DevanagariDataModule(pl.LightningDataModule):
                                 diacritics= self.diacritics,
                                 halfer= self.halfer,
                                 transforms = self.transforms,
-                                seperator = self.seperator,
+                                seperator = self.delimiter,
                                 normalize= self.normalize
                             )
         self.val_dataset = DevanagariDataset(
@@ -61,7 +61,7 @@ class DevanagariDataModule(pl.LightningDataModule):
                                 diacritics= self.diacritics,
                                 halfer= self.halfer,
                                 transforms = self.transforms,
-                                seperator = self.seperator,
+                                seperator = self.delimiter,
                                 normalize= self.normalize
                             )
         if self.test_gt is not None:
@@ -72,7 +72,7 @@ class DevanagariDataModule(pl.LightningDataModule):
                                 diacritics= self.diacritics,
                                 halfer= self.halfer,
                                 transforms = self.transforms,
-                                seperator = self.seperator,
+                                seperator = self.delimiter,
                                 normalize= self.normalize
                             )
         else:
