@@ -29,9 +29,10 @@ vowels = [
 # matra
 matras = [
     'ा','ि','ी','ु','ू','ृ','ॄ', 'ॢ', 'ॣ', 'े','ै', 'ॆ', 
-    'ॊ', 'ो', 'ौ', 'ॏ', 'ऺ', '़', 'ॅ', 'ॉ', '्', 'ँ','ं','ः',
+    'ॊ', 'ो', 'ौ', 'ॏ', 'ऺ', '़', 'ॅ', 'ॉ', 'ँ','ं','ः',
      'ऻ', 'ॎ', '॑', '॒', '॓', '॔', 'ॕ', 'ॖ', 'ॗ', '॰', 'ॱ',
     ]
+halfer = '्'
 #chihn
 punctuations = [
     '।', '!', '$', '₹', '%', '॥','ॽ', 
@@ -135,7 +136,7 @@ def vyanjan2(save_directory):
     with open(save_directory+ "vyanjan2.txt",'w',encoding='UTF-8') as f:
         for c1 in consonants:
             for c2 in consonants:
-                f.write(c1 + '्' + c2 + "\n")
+                f.write(c1 + halfer + c2 + "\n")
 
 def vyanjan2_matra(save_directory):
     """
@@ -145,7 +146,7 @@ def vyanjan2_matra(save_directory):
         for c1 in consonants:
             for c2 in consonants:
                 for m in matras:
-                    f.write(c1 + '्' + c2 + m + "\n")
+                    f.write(c1 + halfer + c2 + m + "\n")
 
 def vyanjan2_matra2(save_directory):
     """
@@ -157,7 +158,7 @@ def vyanjan2_matra2(save_directory):
                 for m1 in matras:
                     for m2 in matras:
                         if m1 != m2 and matra_sanity(m1,m2):
-                            f.write(c1 + '्' + c2 + m1 + m2 + "\n")
+                            f.write(c1 + halfer + c2 + m1 + m2 + "\n")
 
 def ank(save_directories):
     """
@@ -180,7 +181,7 @@ def chihn(save_directory):
 
 
 if __name__ == "__main__":
-    save_directory = "/home/nrohit/IndianSTR/Corpus/"
+    save_directory = "./Corpus/"
     print(len(consonants), len(vowels), len(matras), len(punctuations))
     vyanjan_matra(save_directory)
     vyanjan(save_directory)
