@@ -4,6 +4,9 @@ defaults:
   - model: resnet
   - _self_
 
+model:
+  img_size: 128
+
 Img2Vec:
   _target_: model.Img2Vec.Img2Vec
   character_classes: ['क', 'क़', 'ख', 'ख़', 'ग़', 'ज़', 'ग', 'घ', 'ङ', 'ड़', 'च', 'छ', 'ज', 
@@ -38,15 +41,15 @@ datamodule:
   charset: ${Img2Vec.character_classes}
   diacritics: ${Img2Vec.diacritic_classes}
   halfer: '्'
-  train_img_dir: ../devanagari_synth/vyanjan_synth
-  train_gt: ../devanagari_synth/vyanjan_synth/gt.txt
-  val_img_dir: ../devanagari_synth/vyanjan_synth_test
-  val_gt: ../devanagari_synth/vyanjan_synth_test/gt.txt
+  train_img_dir: ../dev_synth_val
+  train_gt: ../dev_synth_val/gt.txt
+  val_img_dir: ../dev_synth_val
+  val_gt: ../dev_synth_val/gt.txt
   test_img_dir: null
   test_gt: null
   delimiter: "\t"
-  batch_size: 128
-  num_workers: 96
+  batch_size: 512
+  num_workers: 4
 
 logger:
   _target_: lightning.pytorch.loggers.CSVLogger
@@ -73,7 +76,9 @@ early_stopping:
 
 training:
   _target_: lightning.pytorch.Trainer
-  accelerator: cpu
+  accelerator: gpu # options are cpu or gpu
+  strategy: ddp # only use when gpu is available
+  devices: 8
   max_epochs: 20
   check_val_every_n_epoch: 1
   gradient_clip_val: 20
