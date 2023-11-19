@@ -160,7 +160,7 @@ def vyanjan2_matra2(save_directory):
                         if m1 != m2 and matra_sanity(m1,m2):
                             f.write(c1 + halfer + c2 + m1 + m2 + "\n")
 
-def ank(save_directories):
+def ank(save_directory):
     """
     Function to generate corpus of anks (digits)
     """
