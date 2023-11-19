@@ -23,7 +23,7 @@ numerals = ['०','१','२','३','४','५','६' ,'७' ,'८' ,'९']
 # svar
 vowels = [
     'अ', 'आ', 'इ', 'ई', 'उ', 'ऊ', 'ऌ', 'ॡ', 'ऋ',
-    'ॠ', 'ए', 'ऐ', 'ऎ', 'ऒ', 'ओ', 'औ', 'अं', 'अ:', 'ॲ', 
+    'ॠ', 'ए', 'ऐ', 'ऎ', 'ऒ', 'ओ', 'औ', 'ॲ', 
     'ऍ', 'ऑ', 'ऄ', 'ॳ', 'ॴ', 'ॵ', 'ॶ', 'ॷ', 
     ]
 # matra
@@ -181,7 +181,7 @@ def chihn(save_directory):
 
 
 if __name__ == "__main__":
-    save_directory = "./Corpus/"
+    save_directory = "../Corpus/"
     print(len(consonants), len(vowels), len(matras), len(punctuations))
     vyanjan_matra(save_directory)
     vyanjan(save_directory)
