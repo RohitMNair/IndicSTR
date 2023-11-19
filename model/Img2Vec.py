@@ -53,12 +53,12 @@ class Img2Vec(pl.LightningModule):
                             )
         self.diacritic_head = nn.Linear( # multi-label classification
                                 in_features = self.rep_dim,
-                                out_features = len(self.diacritic_classes),
+                                out_features = len(self.diacritic_classes) + 1,
                                 bias = False
                             )
         self.half_character_head = nn.Linear(
                                 in_features = self.rep_dim,
-                                out_features = len(self.half_character_classes),
+                                out_features = len(self.half_character_classes) + 1,
                                 bias = False
                             )
         self.character_loss = nn.CrossEntropyLoss()

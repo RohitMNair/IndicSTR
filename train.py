@@ -63,7 +63,7 @@ def main(cfg: DictConfig):
 
     # assert Path(cfg.log.log_dir).exists
     # logger = CSVLogger(save_dir = cfg.log.log_dir, name = f"{cfg.model.name}_{str(cfg.model.version)}")
-    logger = instantiate(cfg.logger)
+    # logger = instantiate(cfg.logger)
     # checkpoint_dir = (
     #     Path(cfg.log.log_dir)
     #     / "checkpoints"

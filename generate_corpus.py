@@ -38,7 +38,7 @@ punctuations = [
     '।', '!', '$', '₹', '%', '॥','ॽ', 
     ]
 
-special_char = ['ऽ', 'ॐ', ]
+special_char = ['ऽ', 'ॐ']
 
 
 def matra_sanity(m1:str, m2:str)->bool:
@@ -181,7 +181,7 @@ def chihn(save_directory):
 
 
 if __name__ == "__main__":
-    save_directory = "../Corpus/"
+    save_directory = "/global/D1/homes/rohitn/Corpus/"
     print(len(consonants), len(vowels), len(matras), len(punctuations))
     vyanjan_matra(save_directory)
     vyanjan(save_directory)

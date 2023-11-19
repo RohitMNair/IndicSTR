@@ -23,7 +23,8 @@ class DevanagariDataModule(pl.LightningDataModule):
         drop_last (bool): Whether to drop the last batch if its not divisible by the batch size
     """
     def __init__(self, train_img_dir: str, train_gt: str, val_img_dir: str, val_gt: str, 
-                charset:list, diacritics:list, halfer:str, test_img_dir:str = None, test_gt:str = None,
+                charset:list or tuple, diacritics:list or tuple, halfer:str, half_charset: list or tuple,
+                test_img_dir:str = None, test_gt:str = None,
                 batch_size: int = 64, normalize = True, num_workers: int = 0,
                 transforms: transforms.Compose = None, delimiter:str = ' ', drop_last = False):
         super().__init__()
@@ -36,6 +37,7 @@ class DevanagariDataModule(pl.LightningDataModule):
         self.charset = charset
         self.diacritics = diacritics
         self.halfer = halfer
+        self.half_charset = half_charset
         self.transforms = transforms
         self.batch_size = batch_size
         self.num_workers = num_workers
@@ -50,6 +52,7 @@ class DevanagariDataModule(pl.LightningDataModule):
                                 charset= self.charset,
                                 diacritics= self.diacritics,
                                 halfer= self.halfer,
+                                half_charset = self.half_charset,
                                 transforms = self.transforms,
                                 seperator = self.delimiter,
                                 normalize= self.normalize
@@ -60,6 +63,7 @@ class DevanagariDataModule(pl.LightningDataModule):
                                 charset= self.charset,
                                 diacritics= self.diacritics,
                                 halfer= self.halfer,
+                                half_charset = self.half_charset,
                                 transforms = self.transforms,
                                 seperator = self.delimiter,
                                 normalize= self.normalize
@@ -71,6 +75,7 @@ class DevanagariDataModule(pl.LightningDataModule):
                                 charset= self.charset,
                                 diacritics= self.diacritics,
                                 halfer= self.halfer,
+                                half_charset = self.half_charset,
                                 transforms = self.transforms,
                                 seperator = self.delimiter,
                                 normalize= self.normalize
