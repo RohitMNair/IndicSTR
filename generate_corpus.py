@@ -10,6 +10,7 @@ the code will generate the following corpuses:-
 7) vyanjan2_matra
 8) vyanjan2_matra2
 9) ank
+10) Chihn
 """
 # vyanjan
 consonants = [

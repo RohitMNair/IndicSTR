@@ -63,7 +63,8 @@ def main(cfg: DictConfig):
 
     # assert Path(cfg.log.log_dir).exists
     # logger = CSVLogger(save_dir = cfg.log.log_dir, name = f"{cfg.model.name}_{str(cfg.model.version)}")
-    # logger = instantiate(cfg.logger)
+    csv_logger = instantiate(cfg.csv_logger)
+    tensorboard_logger = instantiate(cfg.tensorboard_logger)
     # checkpoint_dir = (
     #     Path(cfg.log.log_dir)
     #     / "checkpoints"
@@ -101,7 +102,11 @@ def main(cfg: DictConfig):
     #     log_every_n_steps= cfg.training.log_every_n_steps,
     #     callbacks = [checkpoint_callback, early_stopping_callback, swa]
     # )
-    trainer = instantiate(cfg.training, callbacks = [checkpoint_callback, early_stopping_callback, swa])
+    trainer = instantiate(
+                    cfg.training, 
+                    callbacks = [checkpoint_callback, early_stopping_callback, swa],
+                    logger = [csv_logger, tensorboard_logger]
+                )
     trainer.fit(model, datamodule)
 
 if __name__ == "__main__":

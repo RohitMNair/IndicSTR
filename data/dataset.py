@@ -39,6 +39,7 @@ class DevanagariDataset(Dataset):
 
         # dict with class indexes as keys and characters as values
         self.char_label_map = {k:c for k,c in enumerate(self.characters, start = 0)}
+        # no need for blank as it is Binary classification of each diacritic
         self.diacritic_label_map = {k:c for k,c in enumerate(self.diacritics, start = 0)}
         # 0 will be reserved for blank
         self.half_char_label_map = {k:c for k,c in enumerate(self.half_characters, start = 1)}
@@ -61,7 +62,7 @@ class DevanagariDataset(Dataset):
             img = self.transforms(img)
         
         # get the character groupings
-        character, half_character, diacritic = None, 0, torch.tensor([0. for i in range(len(self.diacritics)+1)])
+        character, half_character, diacritic = None, 0, torch.tensor([0. for i in range(len(self.diacritics))])
         for i, char in enumerate(label):
             halfer_flag = False
             if char in self.half_charset and i + 1 < len(label) and label[i+1] == self.halfer:
@@ -79,10 +80,14 @@ class DevanagariDataset(Dataset):
 
             elif char == self.halfer and not halfer_flag:
                 halfer_flag = True
+
             elif char == self.halfer and halfer_flag:
                 raise Exception(f"2 half-characters occured")
+
             else:
                 raise Exception(f"Character {char} not found in vocabulary")
+        
+        assert torch.sum(diacritic, dim = -1) <= 2, f"More than 2 diacritics {label}-{diacritic}" 
         return img, half_character, character, diacritic
                        
     def __len__(self):

@@ -6,6 +6,7 @@ defaults:
 
 model:
   img_size: 128
+  version: 50
 
 Img2Vec:
   _target_: model.Img2Vec.Img2Vec
@@ -15,10 +16,12 @@ Img2Vec:
     'श', 'ष', 'स', 'ह', 'ऋ', 'ॠ', 'ॸ', 'ॹ', 'ॺ', 'ॻ', 'ॼ', 'ॾ', 'ॿ', 
     '०','१','२','३','४','५','६' ,'७' ,'८' ,'९', 
     'अ', 'आ', 'इ', 'ई', 'उ', 'ऊ', 'ऌ', 'ॡ', 'ऋ', 'ॠ', 'ए', 'ऐ', 'ऎ', 'ऒ', 
-    'ओ', 'औ', 'ॲ', 'ऍ', 'ऑ', 'ऄ', 'ॳ', 'ॴ', 'ॵ', 'ॶ', 'ॷ']
+    'ओ', 'औ', 'ॲ', 'ऍ', 'ऑ', 'ऄ', 'ॳ', 'ॴ', 'ॵ', 'ॶ', 'ॷ',
+    '।', '!', '$', '₹', '%', '॥','ॽ',
+    'ऽ', 'ॐ']
 
   diacritic_classes: ['ा','ि','ी','ु','ू','ृ','ॄ', 'ॢ', 'ॣ', 'े','ै', 'ॆ', 'ॊ', 'ो', 'ौ', 'ॏ', 'ऺ', 
-    '़', 'ॅ', 'ॉ', 'ँ','ं','ः', 'ऻ', 'ॎ', '॑', '॒', '॓', '॔', 'ॕ', 'ॖ', 'ॗ', '॰', 'ॱ']
+    '़', 'ॅ', 'ॉ', 'ँ','ं','ः', 'ऻ', 'ॎ', '॑', '॒', '॓', '॔', 'ॕ', 'ॖ', 'ॗ', '॰', 'ॱ'] # ensure that halfer is not in this
     
   half_character_classes: ['क', 'क़', 'ख', 'ख़', 'ग़', 'ज़', 'ग', 'घ', 'ङ', 'ड़', 'च', 'छ', 'ज', 
     'झ', 'ञ', 'ट', 'ठ', 'ड', 'ढ', 'ढ़', 'ण', 'त', 'थ', 'द', 'ध', 'न', 'ऩ', 
@@ -28,6 +31,7 @@ Img2Vec:
     _partial_: true
     _target_: torch.optim.Adam
   lr: 0.001
+  weight_decay: 0.01
   threshold: 0.5
   backbone: ${model}
   rep_dim: 2048
@@ -46,23 +50,30 @@ datamodule:
   half_charset: ${Img2Vec.half_character_classes}
   train_img_dir: /global/D1/homes/rohitn/glyph_train1
   train_gt: /global/D1/homes/rohitn/glyph_train1/gt.txt
-  val_img_dir: /global/D1/homes/rohitn/glyph_train1
-  val_gt: /global/D1/homes/rohitn/glyph_train1/gt.txt
+  val_img_dir: /global/D1/homes/rohitn/glyph_val
+  val_gt: /global/D1/homes/rohitn/glyph_val/gt.txt
   test_img_dir: null
   test_gt: null
   delimiter: "\t"
-  batch_size: 512
+  batch_size: 256
   num_workers: 4
 
-logger:
+csv_logger:
   _target_: lightning.pytorch.loggers.CSVLogger
-  save_dir: ./logs
+  save_dir: /global/D1/homes/rohitn/logs # Do not put "/" at the end
   name: Img2Vec_${backbone}_${model.version}
   version: ${now:%Y-%m-%d}/${now:%H-%M-%S}
 
+tensorboard_logger:
+  _target_: lightning.pytorch.loggers.TensorBoardLogger
+  save_dir:  ${csv_logger.save_dir}
+  name: ${csv_logger.name}
+  version: ${csv_logger.version}
+
 model_checkpoint:
   _target_: lightning.pytorch.callbacks.ModelCheckpoint
-  dirpath: ${logger.save_dir}/${logger.name}/${logger.version}/checkpoints
+  dirpath: ${csv_logger.save_dir}/${csv_logger.name}/${csv_logger.version}/checkpoints/      # specify a sub-folder if finetuning
+  filename: "{epoch}-{val_loss:.2f}-{val_acc:.2f}"
   monitor: val_acc
   mode: max
   save_top_k: 3
@@ -79,16 +90,15 @@ early_stopping:
 
 training:
   _target_: lightning.pytorch.Trainer
-  accelerator: cpu # options are cpu or gpu
-  # strategy: auto # only use when gpu is available
-  devices: 1
+  accelerator: gpu # options are cpu or gpu
+  strategy: auto # only use when gpu is available
+  devices: 4
   max_epochs: 20
   check_val_every_n_epoch: 1
   gradient_clip_val: 20
   precision: 64-true
   log_every_n_steps: 5
-  logger: ${logger}
 
 hydra:
   run:
-    dir: ${logger.save_dir}/${logger.name}/${logger.version}
+    dir: ${csv_logger.save_dir}/${csv_logger.name}/${csv_logger.version}
