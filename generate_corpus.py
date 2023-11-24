@@ -189,16 +189,16 @@ def matra(save_directory):
             f.write(m + "\n")
 
 if __name__ == "__main__":
-    save_directory = "/global/D1/homes/rohitn/Corpus/"
+    save_directory = "/home/nrohit/Glyphs/Corpus/"
     print(len(consonants), len(vowels), len(matras), len(punctuations))
-    # vyanjan_matra(save_directory)
-    # vyanjan(save_directory)
-    # svar(save_directory)
-    # vyanjan_matra2(save_directory)
-    # svar_matra(save_directory)
-    # vyanjan2(save_directory)
-    # vyanjan2_matra(save_directory)
-    # vyanjan2_matra2(save_directory)
-    # ank(save_directory)
-    # chihn(save_directory)
+    vyanjan_matra(save_directory)
+    vyanjan(save_directory)
+    svar(save_directory)
+    vyanjan_matra2(save_directory)
+    svar_matra(save_directory)
+    vyanjan2(save_directory)
+    vyanjan2_matra(save_directory)
+    vyanjan2_matra2(save_directory)
+    ank(save_directory)
+    chihn(save_directory)
     matra(save_directory)
