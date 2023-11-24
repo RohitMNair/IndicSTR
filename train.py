@@ -38,10 +38,10 @@ def main(cfg: DictConfig):
         ),
         RescaleTransform(cfg.transforms.img_size),
         PadTransform(cfg.transforms.img_size),
-        transforms.Normalize(
-            mean=[0.485, 0.456, 0.406],
-            std=[0.229, 0.224, 0.225]
-        ),
+        # transforms.Normalize(
+        #     mean=[0.485, 0.456, 0.406],
+        #     std=[0.229, 0.224, 0.225]
+        # ),
         ])
     datamodule = instantiate(cfg.datamodule, transforms = composed)
     # datamodule = DevanagariDataModule(
@@ -107,7 +107,7 @@ def main(cfg: DictConfig):
                     callbacks = [checkpoint_callback, early_stopping_callback, swa],
                     logger = [csv_logger, tensorboard_logger]
                 )
-    trainer.fit(model, datamodule)
+    trainer.fit(model, datamodule, ckpt_path = cfg.ckpt_path)
 
 if __name__ == "__main__":
     main()

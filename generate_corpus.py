@@ -180,17 +180,25 @@ def chihn(save_directory):
         for p in punctuations:
             f.write(p + "\n")
 
+def matra(save_directory):
+    """
+    Function to generate corpus of matras
+    """
+    with open(save_directory + "matra.txt",'w',encoding='UTF-8') as f:
+        for m in matras:
+            f.write(m + "\n")
 
 if __name__ == "__main__":
     save_directory = "/global/D1/homes/rohitn/Corpus/"
     print(len(consonants), len(vowels), len(matras), len(punctuations))
-    vyanjan_matra(save_directory)
-    vyanjan(save_directory)
-    svar(save_directory)
-    vyanjan_matra2(save_directory)
-    svar_matra(save_directory)
-    vyanjan2(save_directory)
-    vyanjan2_matra(save_directory)
-    vyanjan2_matra2(save_directory)
-    ank(save_directory)
-    chihn(save_directory)
+    # vyanjan_matra(save_directory)
+    # vyanjan(save_directory)
+    # svar(save_directory)
+    # vyanjan_matra2(save_directory)
+    # svar_matra(save_directory)
+    # vyanjan2(save_directory)
+    # vyanjan2_matra(save_directory)
+    # vyanjan2_matra2(save_directory)
+    # ank(save_directory)
+    # chihn(save_directory)
+    matra(save_directory)

@@ -32,7 +32,7 @@ class CharGrpAccuracy(Metric):
         sigmoid = nn.Sigmoid() # convert to probability scores
         diac_preds = sigmoid(diac_logits)
         # B element bool
-        diac_bin_mask = torch.all((diac_preds > self.thresh) == (diac >= 1.), dim = 1)
+        diac_bin_mask = torch.all((diac_preds >= self.thresh) == (diac >= 1.), dim = 1)
         # reshape the mask to a column tensor B x 1
         # So that we can append the masks of diacritic, half_char and char
         # column-wise, inorder to compute correct predictions
@@ -89,7 +89,7 @@ class DiacriticAccuracy(Metric):
         sigmoid = nn.Sigmoid() # convert to probability scores
         diac_preds = sigmoid(diacritic_logits)
         # B element bool output
-        diac_bin_mask = torch.all((diac_preds > self.thresh) == (diacritic_target >= 1.), dim = 1)
+        diac_bin_mask = torch.all((diac_preds >= self.thresh) == (diacritic_target >= 1.), dim = 1)
         self.correct += torch.sum(diac_bin_mask, dim = -1)
         self.total += diac_bin_mask.numel()
     
