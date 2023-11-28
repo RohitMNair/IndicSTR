@@ -2,3 +2,5 @@ logs/
 data/__pycache__/*
 model/__pycache__/*
 check.ipynb
+MatraRecog.py
+matra_logs/
