@@ -11,6 +11,8 @@ the code will generate the following corpuses:-
 8) vyanjan2_matra2
 9) ank
 10) Chihn
+11) vyanjan3_matra
+12) vyanjan3_matra2
 """
 # # vyanjan
 # consonants = [
@@ -233,7 +235,7 @@ def matra(save_directory):
             f.write(m + "\n")
 
 if __name__ == "__main__":
-    save_directory = "/home/nrohit/Glyphs/HindiGlyphSynth/Corpus/"
+    save_directory = "/global/D1/homes/rohitn/HindiGlyphSynth/Corpus/"
     print(len(vyanjan), len(svar), len(matras), len(chihn))
     vyanjan_matra(save_directory)
     vyanjan_only(save_directory)

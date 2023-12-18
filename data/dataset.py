@@ -17,18 +17,22 @@ class DevanagariDataset(Dataset):
         img_dir: the path to the image directory w.r.t which the groud truth file
                 image paths
         gt_file: path to the ground truth file
-        sperator: delimiter for the ground truth txt file
+        false_sample_dir (optional): path to negative samples
+        false_sample_gt (optional): path to negative samples file names text file
+        charset (list): Full character list
+        diacritics (list): Diacritics ist
+        halfer (str): the halfer character (eg. Halanth in Devanagari)
+        half_charset (list): List of Half characters
+        separator: delimiter for the ground truth txt file
         transfroms: Image transformations
-        normalize: whether to divide the image by 255
     """
     def __init__(self, img_dir: str, gt_file: str, charset:list or tuple, diacritics:list or tuple, 
-                halfer:str, half_charset:list or tuple,
-                transforms: transforms.Compose = None, seperator:str = ' ', normalize = False):
+                halfer:str, half_charset:list or tuple, transforms: transforms.Compose, separator:str = ' ',
+                false_sample_dir: str = None, false_sample_gt:str = None):
         super().__init__()
         self.img_dir = Path(img_dir)
-        self.gt_file = pd.read_csv(Path(gt_file), delimiter = seperator, header = None)
+        self.gt_file = pd.read_csv(Path(gt_file), delimiter = separator, header = None)
         self.transforms = transforms
-        self.normalize = normalize
         self.characters = charset
         self.charset = set(self.characters)
         self.diacritics = diacritics
@@ -37,15 +41,22 @@ class DevanagariDataset(Dataset):
         self.half_characters = half_charset
         self.half_charset = set(self.half_characters)
 
+        if false_sample_dir and false_sample_gt:
+            self.false_sample_dir = Path(false_sample_dir)
+            self.false_samples = pd.read_csv(Path(false_sample_gt), header = None)
+            self.false_samples[1] = "" # create a new column for empty labels
+            self.gt_file = pd.concat([self.gt_file, self.false_samples], axis = 0) # concat the 2 dfs
+            self.gt_file = self.gt_file.sample(frac = 1).reset_index(drop = True) # shuffle the df
+
         # dict with class indexes as keys and characters as values
-        self.char_label_map = {k:c for k,c in enumerate(self.characters, start = 0)}
-        # no need for blank as it is Binary classification of each diacritic
+        self.char_label_map = {k:c for k,c in enumerate(self.characters, start = 1)}
+        # blank not needed for embedding as it is Binary classification of each diacritic
         self.diacritic_label_map = {k:c for k,c in enumerate(self.diacritics, start = 0)}
         # 0 will be reserved for blank
         self.half_char_label_map = {k:c for k,c in enumerate(self.half_characters, start = 1)}
 
         # dict with characters as keys and class indexes as values
-        self.rev_char_label_map = {c:k for k,c in enumerate(self.characters, start = 0)}
+        self.rev_char_label_map = {c:k for k,c in enumerate(self.characters, start = 1)}
         self.rev_diacritirc_label_map = {c:k for k,c in enumerate(self.diacritics, start = 0)}
         self.rev_half_char_label_map = {c:k for k,c in enumerate(self.half_characters, start = 1)}
         print("Class Maps",self.char_label_map, self.diacritic_label_map, self.half_char_label_map, self.halfer, flush = True)
@@ -53,24 +64,31 @@ class DevanagariDataset(Dataset):
     def __getitem__(self, idx):
         img_name, label = self.gt_file.iloc[idx]
         image_path = self.img_dir / f"{img_name}"
-        img = read_image(image_path.as_posix())
-
-        if self.normalize:
-            img = img / 255
+        img = read_image(image_path.as_posix()) / 255.
 
         if self.transforms is not None:
             img = self.transforms(img)
         
         # get the character groupings
-        character, half_character, diacritic = None, 0, torch.tensor([0. for i in range(len(self.diacritics))])
+        character, half_character1, half_character2, diacritic = 0, 0, 0, torch.tensor([0. for i in range(len(self.diacritics))])
         for i, char in enumerate(label):
-            halfer_flag = False
+            halfer_cntr = 0
             if char in self.half_charset and i + 1 < len(label) and label[i+1] == self.halfer:
                     # for half character occurence
-                    half_character = self.rev_half_char_label_map[char]
+                    if half_character1 == 0:
+                        # half_character1 will always track the half-character
+                        # which is joined with the complete character
+                        half_character1 = self.rev_half_char_label_map[char]
+                    else: # there are more than 1 half-characters
+                        # half_character2 will keep track of half-character 
+                        # not joined with the complete character
+                        half_character2 = half_character1
+                        # the second half-char will be joined to the complete character
+                        half_character1 = self.rev_half_char_label_map[char]
 
             elif char in self.charset:
-                assert character == None, f"2 full Characters have occured {label}-{char}-{character}-{half_character}"
+                assert character == 0,\
+                       f"2 full Characters have occured {label}-{char}-{character}-{half_character1}-{half_character2}"
                 character = self.rev_char_label_map[char]
 
             elif char in self.diac_set:
@@ -78,63 +96,18 @@ class DevanagariDataset(Dataset):
                 assert diacritic[self.rev_diacritirc_label_map[char]] == 0.0, f"2 same matras occured {label}-{char}-{diacritic}"
                 diacritic[self.rev_diacritirc_label_map[char]] = 1.
 
-            elif char == self.halfer and not halfer_flag:
-                halfer_flag = True
+            elif char == self.halfer and halfer_cntr < 2:
+                halfer_cntr += 1
 
-            elif char == self.halfer and halfer_flag:
-                raise Exception(f"2 half-characters occured")
+            elif char == self.halfer and halfer_cntr >=2 :
+                raise Exception(f"More than 2 half-characters occured")
 
             else:
                 raise Exception(f"Character {char} not found in vocabulary")
         
-        assert torch.sum(diacritic, dim = -1) <= 2, f"More than 2 diacritics {label}-{diacritic}" 
-        return img, half_character, character, diacritic
+        assert torch.sum(diacritic, dim = -1) <= 2, f"More than 2 diacritics occured {label}-{diacritic}"
+
+        return img, half_character2, half_character1, character, diacritic
                        
-    def __len__(self):
-        return self.gt_file.shape[0]
-    
-
-class VyanjanDataset(Dataset):
-    """
-    Custom Dataset loader, which load the images and perform transforms on them
-    Load their corresponding labels
-    Args:
-        img_dir: the path to the image directory w.r.t which the groud truth file
-                image paths
-        gt_file: path to the ground truth file
-        sperator: delimiter for the ground truth txt file
-        transfroms: Image transformations
-        normalize: whether to divide the image by 255
-    """
-    def __init__(self, img_dir: str, gt_file: str, transforms = None,  
-                seperator: str = ' ', normalize = True):
-        super(VyanjanDataset, self).__init__()
-        self.img_dir = Path(img_dir)
-        self.gt_file = pd.read_csv(Path(gt_file), delimiter = seperator, header = None)
-        self.transforms = transforms
-        self.normalize = normalize
-        self.charset = (
-            'क', 'क़', 'ख', 'ख़', 'ग़', 'ज़', 'ग', 'घ', 'ङ', 'ड़', 'च', 'छ', 'ज', 'झ', 'ञ', 'ट',
-            'ठ', 'ड', 'ढ', 'ढ़', 'ण', 'त', 'थ', 'द', 'ध', 'न', 'ऩ', 'प', 'फ', 'फ़',
-            'ब', 'भ', 'म', 'य', 'य़', 'र', 'ऱ', 'ल', 'ळ', 'ऴ', 'व', 'श', 'ष',
-            'स', 'ह', 'ऋ', 'ॠ', 'ॸ', 'ॹ', 'ॺ', 'ॻ', 'ॼ', 'ॾ', 'ॿ',
-        )
-
-        self.label_map = {k: self.charset[k] for k in range(len(self.charset))}
-        self.rev_label_map = {self.charset[k]:k for k in range(len(self.charset))}
-
-    def __getitem__(self, idx):
-        img_name, label = self.gt_file.iloc[idx]
-        image_path = self.img_dir / f"{img_name}"
-        img = read_image(image_path.as_posix())
-
-        if self.normalize:
-            img = img / 255
-
-        if self.transforms:
-          img = self.transforms(img)
-
-        return img, self.rev_label_map[label]
-
     def __len__(self):
         return self.gt_file.shape[0]

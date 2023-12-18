@@ -26,10 +26,13 @@ class DevanagariDataModule(pl.LightningDataModule):
                 charset:list or tuple, diacritics:list or tuple, halfer:str, half_charset: list or tuple,
                 test_img_dir:str = None, test_gt:str = None,
                 batch_size: int = 64, normalize = True, num_workers: int = 0,
-                transforms: transforms.Compose = None, delimiter:str = ' ', drop_last = False):
+                transforms: transforms.Compose = None, delimiter:str = ' ', drop_last = False,
+                false_sample_dir:str = None, false_sample_gt:str = None):
         super().__init__()
         self.train_img_dir = train_img_dir
         self.train_gt = train_gt
+        self.false_sample_dir = false_sample_dir
+        self.false_sample_gt = false_sample_gt
         self.val_img_dir = val_img_dir
         self.val_gt = val_gt
         self.test_img_dir = test_img_dir
@@ -54,8 +57,9 @@ class DevanagariDataModule(pl.LightningDataModule):
                                 halfer= self.halfer,
                                 half_charset = self.half_charset,
                                 transforms = self.transforms,
-                                seperator = self.delimiter,
-                                normalize= self.normalize
+                                separator = self.delimiter,
+                                false_sample_dir = self.false_sample_dir,
+                                false_sample_gt = self.false_sample_gt
                             )
         self.val_dataset = DevanagariDataset(
                                 img_dir = self.val_img_dir, 
@@ -65,8 +69,7 @@ class DevanagariDataModule(pl.LightningDataModule):
                                 halfer= self.halfer,
                                 half_charset = self.half_charset,
                                 transforms = self.transforms,
-                                seperator = self.delimiter,
-                                normalize= self.normalize
+                                separator = self.delimiter,
                             )
         if self.test_gt is not None:
             self.test_dataset = DevanagariDataset(
@@ -77,8 +80,7 @@ class DevanagariDataModule(pl.LightningDataModule):
                                 halfer= self.halfer,
                                 half_charset = self.half_charset,
                                 transforms = self.transforms,
-                                seperator = self.delimiter,
-                                normalize= self.normalize
+                                separator = self.delimiter,
                             )
         else:
             self.test_dataset = None
@@ -125,7 +127,7 @@ class VyanjanDataModule(pl.LightningDataModule):
     """
     def __init__(self, train_img_dir: str, train_gt: str, val_img_dir: str, val_gt: str, 
                 batch_size: int = 64, num_workers: int = 0,
-                transforms: transforms.Compose = None, seperator:str = ' ', drop_last = False):
+                transforms: transforms.Compose = None, separator:str = ' ', drop_last = False):
         super().__init__()
         self.train_img_dir = train_img_dir
         self.val_img_dir = val_img_dir
@@ -135,21 +137,21 @@ class VyanjanDataModule(pl.LightningDataModule):
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.drop_last = drop_last
-        self.seperator = seperator
+        self.separator = separator
 
     def setup(self, stage):
         self.train_dataset = VyanjanDataset(
                                 img_dir = self.train_img_dir, 
                                 gt_file = self.train_gt, 
                                 transforms = self.transforms,
-                                seperator = self.seperator
+                                separator = self.separator
                             )
         self.charset = self.train_dataset.charset
         self.val_dataset = VyanjanDataset(
                                 img_dir = self.val_img_dir, 
                                 gt_file = self.val_gt, 
                                 transforms = self.transforms,
-                                seperator = self.seperator
+                                separator = self.separator
                             )
 
     def train_dataloader(self):

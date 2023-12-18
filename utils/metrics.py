@@ -14,7 +14,7 @@ class CharGrpAccuracy(Metric):
         self.add_state("total", default=torch.tensor(0), dist_reduce_fx="sum")
         self.thresh = threshold
 
-    def update(self, preds: torch.Tensor, target: torch.Tensor):
+    def update(self, preds: tuple, target: tuple):
         """
         Update the metric
         Args:
@@ -22,10 +22,11 @@ class CharGrpAccuracy(Metric):
             target (tuple | list): half character class number, character class number, 
                                     diacritics 1 or 2 Hot vector
         """
-        half_char_logits, char_logits, diac_logits = preds
-        half_char, char, diac = target
+        half_char2_logits, half_char1_logits,char_logits, diac_logits = preds
+        half_char2, half_char1, char, diac = target
         # logits will be B * N 
-        half_char_preds = torch.argmax(half_char_logits, dim = 1)
+        half_char2_preds = torch.argmax(half_char2_logits, dim = 1)
+        half_char1_preds = torch.argmax(half_char1_logits, dim= 1)
         char_preds = torch.argmax(char_logits, dim = 1)
 
         assert diac_logits.shape == diac.shape
@@ -38,11 +39,15 @@ class CharGrpAccuracy(Metric):
         # column-wise, inorder to compute correct predictions
         diac_bin_mask = torch.reshape(diac_bin_mask,shape = (-1,1))
         
-        # print(half_char_preds.shape, half_char.shape, diac_bin_mask)
-        assert half_char_preds.shape == half_char.shape
-        half_char_bin_mask = half_char_preds == half_char
+        assert half_char2_preds.shape == half_char2.shape
+        half_char2_bin_mask = half_char2_preds == half_char2
         # Reshape to column tensor B x 1
-        half_char_bin_mask = torch.reshape(half_char_bin_mask,shape= (-1,1))
+        half_char2_bin_mask = torch.reshape(half_char2_bin_mask, shape = (-1,1))
+
+        assert half_char1_preds.shape == half_char1.shape
+        half_char1_bin_mask = half_char1_preds == half_char1
+        # Reshape to column tensor B x 1
+        half_char1_bin_mask = torch.reshape(half_char1_bin_mask,shape= (-1,1))
 
         assert char_preds.shape == char.shape
         char_bin_mask = char_preds == char
@@ -50,8 +55,8 @@ class CharGrpAccuracy(Metric):
         char_bin_mask = torch.reshape(char_bin_mask, shape= (-1,1))
 
         # concat the column-vectors column-wise manner to get a B x 3 tensor
-        grp_pred = torch.cat((half_char_bin_mask, char_bin_mask, diac_bin_mask), dim = 1)
-        # reduce the tensor column-wise, where if all the element of the 
+        grp_pred = torch.cat((half_char2_bin_mask, half_char1_bin_mask, char_bin_mask, diac_bin_mask), dim = 1)
+        # reduce the tensor column-wise, where, if all the element of the 
         # row is True, the the value of that row will be true
         temp = torch.all(grp_pred, dim= 1) # B x 1 Matrix
         # Number of Trues in the matrix
@@ -133,6 +138,54 @@ class HalfCharacterAccuracy(Metric):
     def is_better(self):
         self.higher_is_better = True
 
+class CombinedHalfCharAccuracy(Metric):
+    """
+    Metric to calculate the accuracy of both half characters in character groups
+    Args:
+        threshold (float): Threshold for classification
+    """
+    def __init__(self, threshold):
+        super().__init__()
+        self.add_state("correct", default=torch.tensor(0), dist_reduce_fx="sum")
+        self.add_state("total", default=torch.tensor(0), dist_reduce_fx="sum")
+        self.thresh = threshold
+
+    def update(self, half_char_logits: tuple, half_char_target: tuple):
+        """
+        Update the metric
+        Args:
+            (half_char2_logits, half_char1_logits) (tensor, tensor): Half-Character Logits
+            (half_char2_target, half_char1_target) (tensor, tensor): Corresponding Half-Character true labels 
+        """
+        half_char2_logits, half_char1_logits = half_char_logits
+        half_char2_target, half_char1_target = half_char_target
+        half_char2_preds = torch.argmax(half_char2_logits, dim = 1)
+        half_char1_preds = torch.argmax(half_char1_logits, dim = 1)
+        assert half_char2_preds.shape == half_char2_target.shape
+        half_char2_bin_mask = half_char2_preds == half_char2_target
+        # Reshape to column tensor B x 1
+        half_char2_bin_mask = torch.reshape(half_char2_bin_mask, shape = (-1,1))
+
+        assert half_char1_preds.shape == half_char1_target.shape
+        half_char1_bin_mask = half_char1_preds == half_char1_target
+        # Reshape to column tensor B x 1
+        half_char1_bin_mask = torch.reshape(half_char1_bin_mask,shape= (-1,1))
+
+        # concat the column-vectors column-wise manner to get a B x 3 tensor
+        grp_pred = torch.cat((half_char2_bin_mask, half_char1_bin_mask), dim = 1)
+        # reduce the tensor column-wise, where, if all the element of the 
+        # row is True, the the value of that row will be true
+        temp = torch.all(grp_pred, dim= 1) # B x 1 Matrix
+        self.correct += torch.sum(temp, dim = -1)
+        self.total += temp.numel()
+    
+    def compute(self):
+        return self.correct.float() / self.total
+
+    @property
+    def is_better(self):
+        self.higher_is_better = True
+    
 class CharacterAccuracy(Metric):
     """
     Metric to calculate the accuracy of Full Character recognition in character groups
