@@ -198,8 +198,7 @@ class LMDBDevanagariDataModule(pl.LightningDataModule):
                     self.val_dataset, 
                     batch_size= self.batch_size, 
                     num_workers = self.num_workers,
-                    drop_last = self.drop_last,
-                    shuffle=True,    
+                    drop_last = self.drop_last,   
                 )
     def test_dataloader(self):
         if self.test_dataset is not None:
@@ -208,7 +207,6 @@ class LMDBDevanagariDataModule(pl.LightningDataModule):
                         batch_size= self.batch_size, 
                         num_workers = self.num_workers,
                         drop_last = self.drop_last,
-                        shuffle=True,    
                     )
         else:
             raise Exception("Test data not provided")

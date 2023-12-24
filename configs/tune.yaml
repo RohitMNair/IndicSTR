@@ -1,5 +1,4 @@
 backbone: resnet_50
-ckpt_path: /home/rohitn/D1/Hindi_embed_logs/Img2Vec_resnet_50/81702/train4/checkpoints/last.ckpt
 img_size: 128
 
 defaults: 
@@ -59,17 +58,19 @@ search_space:
     min: 1.0e-8
     max: 1.0e-1
     
+
+tune_config:
+  metric: val_acc
+  mode: max
+  num_samples: 50
+  cpu_per_trial: 8
+  gpu_per_trial: 1 
+
 scheduler:
   _target_: ray.tune.schedulers.ASHAScheduler
   max_t: 50
   grace_period: 1
   reduction_factor: 3
-
-scaling_config:
-  _target_: ray.train.ScalingConfig
-  num_workers: 4
-  use_gpu: true
-  resources_per_worker: {"CPU": 8, "GPU": 1}
 
 run_config:
   _target_: ray.train.RunConfig
@@ -77,31 +78,33 @@ run_config:
     _target_: ray.train.CheckpointConfig
     num_to_keep: 2
     checkpoint_score_attribute: val_acc
-    checkpoint_score_order: max,
+    checkpoint_score_order: max
 
 transforms:
   rotation: 90
   img_size: ${img_size}
   
 datamodule:
-  _target_: data.module.DevanagariDataModule
+  _target_: data.module.LMDBDevanagariDataModule
   charset: ${Img2Vec.character_classes}
   diacritics: ${Img2Vec.diacritic_classes}
   halfer: '्'
   half_charset: ${Img2Vec.half_character_classes}
-  train_img_dir: /home/rohitn/D1/HindiGlyphSynth/glyph_train6
-  train_gt: /home/rohitn/D1/HindiGlyphSynth/glyph_train6/gt.txt
-  val_img_dir: /home/rohitn/D1/HindiGlyphSynth/glyph_val
-  val_gt: /home/rohitn/D1/HindiGlyphSynth/glyph_val/gt.txt
-  false_sample_dir: /home/rohitn/D1/COCO
-  false_sample_gt: /home/rohitn/D1/COCO/image_names.txt
+  train_dir: /home/rohitn/D1/HindiGlyphSynth/train1_lmdb
+  val_dir: /home/rohitn/D1/HindiGlyphSynth/val_lmdb
+  false_sample_dir: /home/rohitn/D1/HindiGlyphSynth/coco
   false_train_wt: 3
   false_val_wt: 1
-  test_img_dir: null
-  test_gt: null
+  test_dir: null
   delimiter: "\t"
   batch_size: 32
   num_workers: 8
+
+tensorboard_logger:
+  _target_: lightning.pytorch.loggers.TensorBoardLogger
+  save_dir: /home/rohitn/D1/Hindi_embed_logs/tune
+  name: Img2Vec_${backbone}
+  version: ${oc.env:SLURM_JOB_ID}
 
 training:
   _target_: lightning.pytorch.Trainer
@@ -115,4 +118,4 @@ training:
 
 hydra:
   run:
-    dir: ${csv_logger.save_dir}/${csv_logger.name}/${csv_logger.version}
+    dir: ${tensorboard_logger.save_dir}/${tensorboard_logger.name}/${tensorboard_logger.version}

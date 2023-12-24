@@ -3,6 +3,7 @@ import pandas as pd
 import lightning.pytorch as pl
 import lmdb
 import io
+import random
 from typing import Optional
 from pathlib import Path
 from torch.utils.data import Dataset
@@ -153,15 +154,31 @@ class LMDBDevanagariDataset(Dataset):
         self._f_env = None
         self.root = img_dir
         self.transforms = transforms
-        self.charset = charset
+        self.characters = charset
+        self.charset = set(self.characters)
         self.diacritics = diacritics
+        self.diac_set = set(self.diacritics)
         self.halfer = halfer
-        self.half_charset = half_charset
+        self.half_characters = half_charset
+        self.half_charset = set(self.half_characters)
         self.false_dir = false_sample_dir
         self.false_weight = false_weight
         self.items = []
         self.num_samples = self._preprocess_labels()
 
+        
+        # dict with class indexes as keys and characters as values
+        self.char_label_map = {k:c for k,c in enumerate(self.characters, start = 1)}
+        # blank not needed for embedding as it is Binary classification of each diacritic
+        self.diacritic_label_map = {k:c for k,c in enumerate(self.diacritics, start = 0)}
+        # 0 will be reserved for blank
+        self.half_char_label_map = {k:c for k,c in enumerate(self.half_characters, start = 1)}
+
+        # dict with characters as keys and class indexes as values
+        self.rev_char_label_map = {c:k for k,c in enumerate(self.characters, start = 1)}
+        self.rev_diacritirc_label_map = {c:k for k,c in enumerate(self.diacritics, start = 0)}
+        self.rev_half_char_label_map = {c:k for k,c in enumerate(self.half_characters, start = 1)}
+        
     def __del__(self):
         if self._t_env is not None:
             self._t_env.close()
@@ -212,7 +229,7 @@ class LMDBDevanagariDataset(Dataset):
                         label = txn.get(label_key).decode()
                         label = label.strip()
                         self.items.append((False, index, label))
-
+        random.shuffle(self.items)
         print("Length of Labels", len(self.items))
         return len(self.items)
 
@@ -221,6 +238,7 @@ class LMDBDevanagariDataset(Dataset):
 
     def __getitem__(self, index):
         item = self.items[index]
+        img, label = None, None
         if item[0]:
             img_key = f'image-{item[1]:09d}'.encode()
             with self.t_env.begin() as txn:
@@ -232,7 +250,7 @@ class LMDBDevanagariDataset(Dataset):
             if self.transforms is not None:
                 img = self.transforms(img)
 
-            return img, item[2]
+            label = item[2]
         
         else:
             img_key = f'image-{item[1]:09d}'.encode()
@@ -244,4 +262,44 @@ class LMDBDevanagariDataset(Dataset):
             img = to_tensor(img)
             if self.transforms is not None:
                 img = self.transforms(img)
-            return img, item[2]
+            label = item[2]
+        
+        # get the character groupings
+        character, half_character1, half_character2, diacritic = 0, 0, 0, torch.tensor([0. for i in range(len(self.diacritics))])
+        for i, char in enumerate(label):
+            halfer_cntr = 0
+            if char in self.half_charset and i + 1 < len(label) and label[i+1] == self.halfer:
+                    # for half character occurence
+                    if half_character1 == 0:
+                        # half_character1 will always track the half-character
+                        # which is joined with the complete character
+                        half_character1 = self.rev_half_char_label_map[char]
+                    else: # there are more than 1 half-characters
+                        # half_character2 will keep track of half-character 
+                        # not joined with the complete character
+                        half_character2 = half_character1
+                        # the second half-char will be joined to the complete character
+                        half_character1 = self.rev_half_char_label_map[char]
+
+            elif char in self.charset:
+                assert character == 0,\
+                       f"2 full Characters have occured {label}-{char}-{character}-{half_character1}-{half_character2}"
+                character = self.rev_char_label_map[char]
+
+            elif char in self.diac_set:
+                # for diacritic occurence
+                assert diacritic[self.rev_diacritirc_label_map[char]] == 0.0, f"2 same matras occured {label}-{char}-{diacritic}"
+                diacritic[self.rev_diacritirc_label_map[char]] = 1.
+
+            elif char == self.halfer and halfer_cntr < 2:
+                halfer_cntr += 1
+
+            elif char == self.halfer and halfer_cntr >=2 :
+                raise Exception(f"More than 2 half-characters occured")
+
+            else:
+                raise Exception(f"Character {char} not found in vocabulary")
+        
+        assert torch.sum(diacritic, dim = -1) <= 2, f"More than 2 diacritics occured {label}-{diacritic}"
+        return img, half_character2, half_character1, character, diacritic
+        
