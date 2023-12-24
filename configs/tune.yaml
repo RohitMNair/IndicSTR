@@ -42,14 +42,43 @@ Img2Vec:
   optimizer:
     _partial_: true
     _target_: torch.optim.AdamW
-  lr: 1.0e-5
-  weight_decay: 0.0
   threshold: 0.5
   backbone: ${model}
-  rep_dim: 1024
   activation:
     _target_: torch.nn.GELU
+  
+search_space:
+  lr:
+    min: 1.0e-8
+    max: 1.0e-1
+  weight_decay:
+    min: 1.0e-8
+    max: 1.0e-1
+  rep_dim: [256, 512, 768, 1024, 1280, 1536, 1792, 2048]
+  swa_lrs:
+    min: 1.0e-8
+    max: 1.0e-1
     
+scheduler:
+  _target_: ray.tune.schedulers.ASHAScheduler
+  max_t: 50
+  grace_period: 1
+  reduction_factor: 3
+
+scaling_config:
+  _target_: ray.train.ScalingConfig
+  num_workers: 4
+  use_gpu: true
+  resources_per_worker: {"CPU": 8, "GPU": 1}
+
+run_config:
+  _target_: ray.train.RunConfig
+  checkpoint_config:
+    _target_: ray.train.CheckpointConfig
+    num_to_keep: 2
+    checkpoint_score_attribute: val_acc
+    checkpoint_score_order: max,
+
 transforms:
   rotation: 90
   img_size: ${img_size}
@@ -74,47 +103,14 @@ datamodule:
   batch_size: 32
   num_workers: 8
 
-csv_logger:
-  _target_: lightning.pytorch.loggers.CSVLogger
-  save_dir: /global/D1/homes/rohitn/Hindi_embed_logs # Do not put "/" at the end
-  name: Img2Vec_${backbone}
-  # version: ${oc.env:SLURM_JOB_ID} # using SLURM Job Id which is obtained in the train script
-  version: 81702/train6/additional_2 # specify a sub-folder if continuing training
-
-tensorboard_logger:
-  _target_: lightning.pytorch.loggers.TensorBoardLogger
-  save_dir:  ${csv_logger.save_dir}
-  name: ${csv_logger.name}
-  version: ${csv_logger.version}
-
-model_checkpoint:
-  _target_: lightning.pytorch.callbacks.ModelCheckpoint
-  dirpath: ${csv_logger.save_dir}/${csv_logger.name}/${csv_logger.version}/checkpoints/      
-  filename: "{epoch}-{val_loss:.2f}-{val_acc:.2f}"
-  monitor: val_acc
-  mode: max
-  save_top_k: 3
-  save_last: true
-  
-early_stopping:
-  _target_: lightning.pytorch.callbacks.early_stopping.EarlyStopping
-  monitor: train_loss_epoch
-  mode: min
-  min_delta: 0.005
-  patience: 2
-  verbose: true
-  check_finite: true
-
 training:
   _target_: lightning.pytorch.Trainer
   accelerator: gpu # options are cpu or gpu
-  strategy: ddp # only use when gpu is available
-  devices: 4
-  max_epochs: 20
+  strategy: auto # only use when gpu is available
+  devices: auto
   check_val_every_n_epoch: 1
   gradient_clip_val: 10
   precision: 32-true
-  log_every_n_steps: 5
   num_nodes: 1
 
 hydra:

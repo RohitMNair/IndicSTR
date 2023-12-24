@@ -1,25 +1,25 @@
-__target__: transformers.FocalNetModel
+_target_: model.focalnet.FocalNetBackbone
 config:
-  __target__: transformers.FocalNetConfig
-  image_size: 64,
-  patch_size: 2,
-  num_channels: 3,
-  embed_dim: 96,
-  use_conv_embed: True,
-  hidden_sizes: [192, 384, 768, 768],
-  depths: [2, 2, 6, 2],
-  focal_levels: [2, 2, 2, 2],
-  focal_windows: [3, 3, 3, 3],
-  hidden_act: "gelu",
-  mlp_ratio: 4.0,
-  hidden_dropout_prob: 0.2,
-  drop_path_rate: 0.1,
-  use_layerscale: 1e-4,
-  use_post_layernorm: False,
-  use_post_layernorm_in_modulation: False,
-  normalize_modulator: False,
-  initializer_range: 2e-2,
-  layer_norm_eps: 1e-5,
-  encoder_stride: 32,
+  _target_: transformers.FocalNetConfig
+  image_size: 64
+  patch_size: 4
+  num_channels: 3
+  embed_dim: 96
+  use_conv_embed: True
+  hidden_sizes: [192, 384, 768, 768]
+  depths: [2, 2, 6, 2]
+  focal_levels: [2, 2, 2, 2]
+  focal_windows: [3, 3, 3, 3]
+  hidden_act: "gelu"
+  mlp_ratio: 4.0
+  hidden_dropout_prob: 0.2
+  drop_path_rate: 0.1
+  use_layerscale: 1e-4
+  use_post_layernorm: False
+  use_post_layernorm_in_modulation: False
+  normalize_modulator: False
+  initializer_range: 2e-2
+  layer_norm_eps: 1e-5
+  encoder_stride: 32
   out_features: null
-add_pooling_layer: True
+out_features: 768 # output feature dim

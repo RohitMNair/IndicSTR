@@ -37,7 +37,7 @@ class Img2Vec(pl.LightningModule):
         self.rep_layer = nn.Sequential(
                             self.activation,
                             nn.Linear(
-                                in_features = self.backbone.model.fc.out_features,
+                                in_features = self.backbone.out_features,
                                 out_features = self.rep_dim,
                                 bias = True
                             ),
@@ -109,7 +109,7 @@ class Img2Vec(pl.LightningModule):
         x, half_char2, half_char1, char, diac = batch
         half_char2_logits, half_char1_logits, char_logits, diac_logits = self.forward(x)
         loss = self.half_character_loss(half_char2_logits, half_char2) + self.half_character_loss(half_char1_logits, half_char1) \
-        + self.character_loss(char_logits, char) + 4*self.diacritic_loss(diac_logits, diac)
+        + self.character_loss(char_logits, char) + self.diacritic_loss(diac_logits, diac)
 
         self.train_acc((half_char2_logits, half_char1_logits, char_logits, diac_logits), (half_char2, half_char1, char, diac))
         self.train_diac_acc(diac_logits, diac)

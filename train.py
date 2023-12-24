@@ -1,21 +1,11 @@
 import torch
-import torchvision
-import numpy as np
 import hydra
-import os
-import lightning.pytorch as pl
-from pathlib import Path
-from torchvision import transforms, utils
+from torchvision import transforms
 from utils.transforms import RescaleTransform, PadTransform
-from data.module import DevanagariDataModule
-from model.ResNet import ResNet
-from model.ViT import ViT
-from model.Img2Vec import Img2Vec
-from lightning.pytorch.loggers import CSVLogger
-from lightning.pytorch.callbacks import ModelCheckpoint, StochasticWeightAveraging
-from lightning.pytorch.callbacks.early_stopping import EarlyStopping
+from lightning.pytorch.callbacks import StochasticWeightAveraging
 from omegaconf import DictConfig
 from hydra.utils import instantiate
+
 
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -29,7 +19,6 @@ def main(cfg: DictConfig):
     """
     Function to train character embeddings
     """
-    assert isinstance(cfg.model.img_size, int)
     composed = transforms.Compose([
         transforms.RandomRotation(
             degrees= cfg.transforms.rotation, 

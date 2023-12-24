@@ -1,4 +1,4 @@
 _target_: model.ResNet.ResNet
 version: 50
 img_size: 128
-out_features: 2048
+out_features: 1024
