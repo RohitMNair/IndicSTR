@@ -239,13 +239,13 @@ class LMDBDevanagariDataset(Dataset):
     def __getitem__(self, index):
         item = self.items[index]
         img, label = None, None
+        to_tensor = transforms.ToTensor()
         if item[0]:
             img_key = f'image-{item[1]:09d}'.encode()
             with self.t_env.begin() as txn:
                 imgbuf = txn.get(img_key)
             buf = io.BytesIO(imgbuf)
             img = Image.open(buf).convert('RGB')
-            to_tensor = transforms.ToTensor()
             img = to_tensor(img)
             if self.transforms is not None:
                 img = self.transforms(img)
@@ -258,7 +258,6 @@ class LMDBDevanagariDataset(Dataset):
                 imgbuf = txn.get(img_key)
             buf = io.BytesIO(imgbuf)
             img = Image.open(buf).convert('RGB')
-            to_tensor = transforms.ToTensor()
             img = to_tensor(img)
             if self.transforms is not None:
                 img = self.transforms(img)

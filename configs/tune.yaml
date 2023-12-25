@@ -60,25 +60,23 @@ search_space:
     
 
 tune_config:
-  metric: val_acc
+  metric: val_loss
   mode: max
-  num_samples: 50
-  cpu_per_trial: 8
+  num_samples: 20 # number of trials
+  cpu_per_trial: 16
   gpu_per_trial: 1 
+  search_alg:
+    _target_: ray.tune.search.ax.AxSearch
+    points_to_evaluate: [
+      {"lr": 1.0e-4, "weight_decay": 0.0, "rep_dim": 1024, "swa_lrs": 1.0e-2},
+      {"lr": 1.0e-5, "weight_decay": 0.0, "rep_dim": 1024, "swa_lrs": 1.0e-2}
+    ]
 
 scheduler:
   _target_: ray.tune.schedulers.ASHAScheduler
-  max_t: 50
+  max_t: 6 # max epochs per trial
   grace_period: 1
   reduction_factor: 3
-
-run_config:
-  _target_: ray.train.RunConfig
-  checkpoint_config:
-    _target_: ray.train.CheckpointConfig
-    num_to_keep: 2
-    checkpoint_score_attribute: val_acc
-    checkpoint_score_order: max
 
 transforms:
   rotation: 90
@@ -100,17 +98,16 @@ datamodule:
   batch_size: 32
   num_workers: 8
 
-tensorboard_logger:
-  _target_: lightning.pytorch.loggers.TensorBoardLogger
-  save_dir: /home/rohitn/D1/Hindi_embed_logs/tune
-  name: Img2Vec_${backbone}
-  version: ${oc.env:SLURM_JOB_ID}
+run_config:
+  _target_: ray.train.RunConfig
+  storage_path : /home/rohitn/D1/Hindi_embed_logs/tune/Img2Vec_${backbone}
+  name: ${oc.env:SLURM_JOB_ID}
 
 training:
   _target_: lightning.pytorch.Trainer
   accelerator: gpu # options are cpu or gpu
   strategy: auto # only use when gpu is available
-  devices: auto
+  devices: 1
   check_val_every_n_epoch: 1
   gradient_clip_val: 10
   precision: 32-true
@@ -118,4 +115,4 @@ training:
 
 hydra:
   run:
-    dir: ${tensorboard_logger.save_dir}/${tensorboard_logger.name}/${tensorboard_logger.version}
+    dir: ${run_config.storage_path}/${run_config.name}

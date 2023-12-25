@@ -1,14 +1,10 @@
-from ray.train.lightning import (
-    RayTrainReportCallback,
-    prepare_trainer,
-)
 from torchvision import transforms
 from utils.transforms import RescaleTransform, PadTransform
 from lightning.pytorch.callbacks import StochasticWeightAveraging
 from omegaconf import DictConfig
 from hydra.utils import instantiate
 from ray import tune
-from ray.train.torch import TorchTrainer
+from ray.train import RunConfig
 from omegaconf import DictConfig
 from hydra.utils import instantiate
 
@@ -47,12 +43,10 @@ def train(hparams, cfg):
         rep_dim = hparams["rep_dim"]
         )
     swa = StochasticWeightAveraging(swa_lrs=hparams["swa_lrs"])
-    tensorboard = instantiate(cfg.tensorboard_logger)
     trainer = instantiate(
-                    cfg.training, 
+                    cfg.training,
                     strategy="auto", #DDP is not supported
                     callbacks=[swa],
-                    logger = [tensorboard],
                     enable_progress_bar=False,
                 )
     trainer.fit(model, datamodule)
@@ -68,34 +62,27 @@ def main(cfg: DictConfig):
 
     scheduler = instantiate(cfg.scheduler)
 
-    reporter = tune.CLIReporter(
-        parameter_columns=[cfg.tune_config.metric],
-        metric_columns=[
-            'val_acc', 
-            'val_loss',
-            'val_half_character2_acc',
-            'val_half_character1_acc',
-            'val_combined_half_character_acc',
-            'val_diacritic_acc',
-            'val_character_acc'
-            ]
+    tuner = tune.Tuner(
+        tune.with_resources(
+            tune.with_parameters(train, cfg=cfg),
+            resources= {
+                'cpu': cfg.tune_config.cpu_per_trial,
+                'gpu': cfg.tune_config.gpu_per_trial
+                }, 
+        ),
+        tune_config= tune.TuneConfig(
+            search_alg= instantiate(cfg.tune_config.search_alg),  
+            metric= cfg.tune_config.metric,
+            mode= cfg.tune_config.mode,
+            scheduler=scheduler,
+            num_samples=cfg.tune_config.num_samples,
+        ),
+        run_config= instantiate(cfg.run_config),
+        param_space=search_space,
     )
-
-    analysis = tune.run(
-        tune.with_parameters(train, cfg=cfg),
-        metric= cfg.tune_config.metric,
-        mode= cfg.tune_config.mode,
-        config=search_space,
-        resources_per_trial= {
-            'cpu': cfg.tune_config.cpu_per_trial,
-            'gpu': cfg.tune_config.gpu_per_trial
-        }, 
-        num_samples=cfg.tune_config.num_samples,
-        scheduler=scheduler,
-        progress_reporter=reporter,
-    )
-
-    print('Best hyperparameters found were: ', analysis.best_config)
+    results = tuner.fit()
+    best_results = results.get_best_result(cfg.tune_config.metric,cfg.tune_config.mode)
+    print('Best hyperparameters found were: ', best_results.config)
 
 if __name__ == '__main__':
     main()
