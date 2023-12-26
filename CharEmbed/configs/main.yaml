@@ -1,5 +1,6 @@
 backbone: resnet_50
-ckpt_path: /home/rohitn/D1/Hindi_embed_logs/Img2Vec_resnet_50/81702/train4/checkpoints/last.ckpt
+ckpt_path: /home/rohitn/D1/Hindi_embed_logs/Img2Vec_resnet_50_r512/82427/checkpoints/epoch=15-val_loss=0.24-val_acc=0.85.ckpt
+# ckpt_path: null
 img_size: 128
 
 defaults: 
@@ -42,11 +43,11 @@ Img2Vec:
   optimizer:
     _partial_: true
     _target_: torch.optim.AdamW
-  lr: 1.0e-5
+  lr: 1.0e-4
   weight_decay: 0.0
   threshold: 0.5
   backbone: ${model}
-  rep_dim: 1024
+  rep_dim: 512
   activation:
     _target_: torch.nn.GELU
     
@@ -54,22 +55,38 @@ transforms:
   rotation: 90
   img_size: ${img_size}
   
+# datamodule:
+#   _target_: data.module.DevanagariDataModule
+#   charset: ${Img2Vec.character_classes}
+#   diacritics: ${Img2Vec.diacritic_classes}
+#   halfer: '्'
+#   half_charset: ${Img2Vec.half_character_classes}
+#   train_img_dir: /home/rohitn/D1/HindiGlyphSynth/glyph_train1
+#   train_gt: /home/rohitn/D1/HindiGlyphSynth/glyph_train1/gt.txt
+#   val_img_dir: /home/rohitn/D1/HindiGlyphSynth/glyph_val
+#   val_gt: /home/rohitn/D1/HindiGlyphSynth/glyph_val/gt.txt
+#   false_sample_dir: /home/rohitn/D1/COCO
+#   false_sample_gt: /home/rohitn/D1/COCO/image_names.txt
+#   false_train_wt: 3
+#   false_val_wt: 1
+#   test_img_dir: null
+#   test_gt: null
+#   delimiter: "\t"
+#   batch_size: 32
+#   num_workers: 8
+
 datamodule:
-  _target_: data.module.DevanagariDataModule
+  _target_: data.module.LMDBDevanagariDataModule
   charset: ${Img2Vec.character_classes}
   diacritics: ${Img2Vec.diacritic_classes}
   halfer: '्'
   half_charset: ${Img2Vec.half_character_classes}
-  train_img_dir: /home/rohitn/D1/HindiGlyphSynth/glyph_train6
-  train_gt: /home/rohitn/D1/HindiGlyphSynth/glyph_train6/gt.txt
-  val_img_dir: /home/rohitn/D1/HindiGlyphSynth/glyph_val
-  val_gt: /home/rohitn/D1/HindiGlyphSynth/glyph_val/gt.txt
-  false_sample_dir: /home/rohitn/D1/COCO
-  false_sample_gt: /home/rohitn/D1/COCO/image_names.txt
+  train_dir: /home/rohitn/D1/HindiGlyphSynth/train2_lmdb
+  val_dir: /home/rohitn/D1/HindiGlyphSynth/val_lmdb
+  false_sample_dir: /home/rohitn/D1/HindiGlyphSynth/coco
   false_train_wt: 3
   false_val_wt: 1
-  test_img_dir: null
-  test_gt: null
+  test_dir: null
   delimiter: "\t"
   batch_size: 32
   num_workers: 8
@@ -77,9 +94,9 @@ datamodule:
 csv_logger:
   _target_: lightning.pytorch.loggers.CSVLogger
   save_dir: /global/D1/homes/rohitn/Hindi_embed_logs # Do not put "/" at the end
-  name: Img2Vec_${backbone}
+  name: Img2Vec_${backbone}_r512
   # version: ${oc.env:SLURM_JOB_ID} # using SLURM Job Id which is obtained in the train script
-  version: 81702/train6/additional_2 # specify a sub-folder if continuing training
+  version: 82427/train2/ # specify a sub-folder if continuing training
 
 tensorboard_logger:
   _target_: lightning.pytorch.loggers.TensorBoardLogger
@@ -100,7 +117,7 @@ early_stopping:
   _target_: lightning.pytorch.callbacks.early_stopping.EarlyStopping
   monitor: train_loss_epoch
   mode: min
-  min_delta: 0.005
+  min_delta: 0.01
   patience: 2
   verbose: true
   check_finite: true
@@ -110,7 +127,7 @@ training:
   accelerator: gpu # options are cpu or gpu
   strategy: ddp # only use when gpu is available
   devices: 4
-  max_epochs: 20
+  max_epochs: 25
   check_val_every_n_epoch: 1
   gradient_clip_val: 10
   precision: 32-true

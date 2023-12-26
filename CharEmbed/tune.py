@@ -4,7 +4,7 @@ from lightning.pytorch.callbacks import StochasticWeightAveraging
 from omegaconf import DictConfig
 from hydra.utils import instantiate
 from ray import tune
-from ray.train import RunConfig
+from ray.train.lightning import RayTrainReportCallback
 from omegaconf import DictConfig
 from hydra.utils import instantiate
 
@@ -42,11 +42,12 @@ def train(hparams, cfg):
         weight_decay = hparams["weight_decay"],
         rep_dim = hparams["rep_dim"]
         )
+    tune_report_callback = RayTrainReportCallback()
     swa = StochasticWeightAveraging(swa_lrs=hparams["swa_lrs"])
     trainer = instantiate(
                     cfg.training,
                     strategy="auto", #DDP is not supported
-                    callbacks=[swa],
+                    callbacks=[swa, tune_report_callback],
                     enable_progress_bar=False,
                 )
     trainer.fit(model, datamodule)
@@ -64,12 +65,8 @@ def main(cfg: DictConfig):
 
     tuner = tune.Tuner(
         tune.with_resources(
-            tune.with_parameters(train, cfg=cfg),
-            resources= {
-                'cpu': cfg.tune_config.cpu_per_trial,
-                'gpu': cfg.tune_config.gpu_per_trial
-                }, 
-        ),
+            tune.with_parameters(train, cfg=cfg), 
+            {"cpu": cfg.tune_config.cpu_per_trial, "gpu": cfg.tune_config.gpu_per_trial}),
         tune_config= tune.TuneConfig(
             search_alg= instantiate(cfg.tune_config.search_alg),  
             metric= cfg.tune_config.metric,
