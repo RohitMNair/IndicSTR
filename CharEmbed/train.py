@@ -5,7 +5,7 @@ from utils.transforms import RescaleTransform, PadTransform
 from lightning.pytorch.callbacks import StochasticWeightAveraging
 from omegaconf import DictConfig
 from hydra.utils import instantiate
-
+from model.Img2Vec import Img2Vec
 
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -34,7 +34,7 @@ def main(cfg: DictConfig):
         ])
     datamodule = instantiate(cfg.datamodule, transforms = composed)
 
-    model = instantiate(cfg.Img2Vec)
+    
 
     csv_logger = instantiate(cfg.csv_logger)
     tensorboard_logger = instantiate(cfg.tensorboard_logger)
@@ -50,7 +50,9 @@ def main(cfg: DictConfig):
                     callbacks = [checkpoint_callback, early_stopping_callback, swa],
                     logger = [csv_logger, tensorboard_logger]
                 )
+    
+    model = instantiate(cfg.Img2Vec)
     trainer.fit(model, datamodule, ckpt_path = cfg.ckpt_path)
-
+    
 if __name__ == "__main__":
     main()

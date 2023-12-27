@@ -1,5 +1,5 @@
 backbone: resnet_50
-ckpt_path: /home/rohitn/D1/Hindi_embed_logs/Img2Vec_resnet_50_r512/82427/checkpoints/epoch=15-val_loss=0.24-val_acc=0.85.ckpt
+ckpt_path: /home/rohitn/D1/Hindi_embed_logs/Img2Vec_resnet_50_r512/82574/train1/checkpoints/epoch=12-val_loss=0.24-val_acc=0.84.ckpt
 # ckpt_path: null
 img_size: 128
 
@@ -81,7 +81,7 @@ datamodule:
   diacritics: ${Img2Vec.diacritic_classes}
   halfer: '्'
   half_charset: ${Img2Vec.half_character_classes}
-  train_dir: /home/rohitn/D1/HindiGlyphSynth/train2_lmdb
+  train_dir: /home/rohitn/D1/HindiGlyphSynth/train3_lmdb
   val_dir: /home/rohitn/D1/HindiGlyphSynth/val_lmdb
   false_sample_dir: /home/rohitn/D1/HindiGlyphSynth/coco
   false_train_wt: 3
@@ -89,14 +89,14 @@ datamodule:
   test_dir: null
   delimiter: "\t"
   batch_size: 32
-  num_workers: 8
+  num_workers: 16
 
 csv_logger:
   _target_: lightning.pytorch.loggers.CSVLogger
   save_dir: /global/D1/homes/rohitn/Hindi_embed_logs # Do not put "/" at the end
   name: Img2Vec_${backbone}_r512
   # version: ${oc.env:SLURM_JOB_ID} # using SLURM Job Id which is obtained in the train script
-  version: 82427/train2/ # specify a sub-folder if continuing training
+  version: 82574/train2 # specify a sub-folder if continuing training
 
 tensorboard_logger:
   _target_: lightning.pytorch.loggers.TensorBoardLogger
@@ -115,9 +115,9 @@ model_checkpoint:
   
 early_stopping:
   _target_: lightning.pytorch.callbacks.early_stopping.EarlyStopping
-  monitor: train_loss_epoch
+  monitor: val_loss
   mode: min
-  min_delta: 0.01
+  min_delta: 0.005
   patience: 2
   verbose: true
   check_finite: true
