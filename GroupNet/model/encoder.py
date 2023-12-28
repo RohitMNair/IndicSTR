@@ -2,6 +2,7 @@ from transformers import ViTConfig, ViTModel
 import torch.nn as nn
 import torch
 import lightning.pytorch as pl
+from typing import Union
 
 class ConvEmbedding(pl.LightningModule):
     """
@@ -44,7 +45,7 @@ class ViTEncoder(pl.LightningModule):
                  intermediate_size: int = 3072, hidden_act: str = "gelu", hidden_dropout_prob: float = 0.0,
                  attention_probs_dropout_prob: float = 0.0, initializer_range: float = 0.02,
                  layer_norm_eps: float = 1e-12, image_size: int = 224, patch_size: int = 16, 
-                 num_channels: int = 3, qkv_bias: bool = True, encoder_stride: int = 16) -> None:
+                 num_channels: int = 3, qkv_bias: bool = True, encoder_stride:Union[int, None] = 16) -> None:
         super().__init__()
         self.config =  ViTConfig(
                             hidden_size = hidden_size, 
@@ -66,5 +67,4 @@ class ViTEncoder(pl.LightningModule):
         self.vit = ViTModel(self.config)
 
     def forward(self, x):
-        return self.vit(x)
-    
+        return self.vit(x, output_attentions= False, output_hidden_states= False).last_hidden_state
