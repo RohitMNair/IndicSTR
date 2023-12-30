@@ -1,6 +1,6 @@
 backbone: resnet_50
-ckpt_path: /home/rohitn/D1/Hindi_embed_logs/Img2Vec_resnet_50_r512/82574/train1/checkpoints/epoch=12-val_loss=0.24-val_acc=0.84.ckpt
-# ckpt_path: null
+# ckpt_path: /home/rohitn/D1/Hindi_embed_logs/Img2Vec_resnet_50_r512/82574/train1/checkpoints/epoch=12-val_loss=0.24-val_acc=0.84.ckpt
+ckpt_path: null
 img_size: 128
 
 defaults: 
@@ -47,7 +47,7 @@ Img2Vec:
   weight_decay: 0.0
   threshold: 0.5
   backbone: ${model}
-  rep_dim: 512
+  rep_dim: 1024
   activation:
     _target_: torch.nn.GELU
     
@@ -81,7 +81,7 @@ datamodule:
   diacritics: ${Img2Vec.diacritic_classes}
   halfer: '्'
   half_charset: ${Img2Vec.half_character_classes}
-  train_dir: /home/rohitn/D1/HindiGlyphSynth/train3_lmdb
+  train_dir: /home/rohitn/D1/HindiGlyphSynth/glyph_train_complete_lmdb
   val_dir: /home/rohitn/D1/HindiGlyphSynth/val_lmdb
   false_sample_dir: /home/rohitn/D1/HindiGlyphSynth/coco
   false_train_wt: 3
@@ -89,14 +89,14 @@ datamodule:
   test_dir: null
   delimiter: "\t"
   batch_size: 32
-  num_workers: 16
+  num_workers: 8
 
 csv_logger:
   _target_: lightning.pytorch.loggers.CSVLogger
   save_dir: /global/D1/homes/rohitn/Hindi_embed_logs # Do not put "/" at the end
-  name: Img2Vec_${backbone}_r512
-  # version: ${oc.env:SLURM_JOB_ID} # using SLURM Job Id which is obtained in the train script
-  version: 82574/train2 # specify a sub-folder if continuing training
+  name: Img2Vec_${backbone}_r1024
+  version: ${oc.env:SLURM_JOB_ID} # using SLURM Job Id which is obtained in the train script
+  # version: 82574/train2 # specify a sub-folder if continuing training
 
 tensorboard_logger:
   _target_: lightning.pytorch.loggers.TensorBoardLogger
@@ -117,8 +117,8 @@ early_stopping:
   _target_: lightning.pytorch.callbacks.early_stopping.EarlyStopping
   monitor: val_loss
   mode: min
-  min_delta: 0.005
-  patience: 2
+  min_delta: 0.01
+  patience: 1
   verbose: true
   check_finite: true
 
@@ -126,8 +126,8 @@ training:
   _target_: lightning.pytorch.Trainer
   accelerator: gpu # options are cpu or gpu
   strategy: ddp # only use when gpu is available
-  devices: 4
-  max_epochs: 25
+  devices: 2
+  max_epochs: 20
   check_val_every_n_epoch: 1
   gradient_clip_val: 10
   precision: 32-true

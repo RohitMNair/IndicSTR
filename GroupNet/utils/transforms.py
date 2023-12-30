@@ -16,20 +16,20 @@ class RescaleTransform(object):
       self.output_size = output_size
 
   def __call__(self, image):
-      h, w = image.shape[1:]
-      if isinstance(self.output_size, int):
-          new_h, new_w = self.output_size, self.output_size
-          aspect_ratio = w / h
-          if w > h:
-              new_h = int(new_w / aspect_ratio)
-          else:
-              new_w = int(new_h * aspect_ratio)
-      else:
-          new_h, new_w = self.output_size
+        h, w = image.shape[1:]
+        if isinstance(self.output_size, int):
+            new_h, new_w = self.output_size, self.output_size
+            aspect_ratio = w / h
+            if w > h:
+                new_h = int(new_w / aspect_ratio)
+            else:
+                new_w = int(new_h * aspect_ratio)
+        else:
+            new_h, new_w = self.output_size
 
-      new_h, new_w = int(new_h), int(new_w)
-      image = transforms.Resize((new_h, new_w), antialias=True)(image)
-      return image
+        new_h, new_w = int(new_h), int(new_w)
+        image = transforms.Resize((new_h, new_w), antialias=True)(image)
+        return image
 
 class PadTransform(object):
     """Pad the image in a sample to a given size.

@@ -1,5 +1,7 @@
 from encoder import ViTEncoder
 from decoder import GroupDecoder
+from utils.metrics import (DiacriticAccuracy, CharacterAccuracy, CharGrpAccuracy,
+                   HalfCharacterAccuracy, CombinedHalfCharAccuracy)
 
 import lightning.pytorch as pl
 import torch
@@ -51,7 +53,7 @@ class GroupNet(pl.LightningModule):
                  mlp_ratio: float= 4.0, hidden_act: str = "gelu", hidden_dropout_prob: float = 0.0,
                  attention_probs_dropout_prob: float = 0.0, initializer_range: float = 0.02,
                  layer_norm_eps: float = 1e-12, image_size: int = 224, patch_size: int = 16, 
-                 num_channels: int = 3, qkv_bias: bool = True, max_grps: int = 25,
+                 num_channels: int = 3, qkv_bias: bool = True, max_grps: int = 25, threshold:float= 0.5,
                  ):
         super().__init__()
         self.h_c_2_emb = half_character_2_embeddings
@@ -76,6 +78,7 @@ class GroupNet(pl.LightningModule):
         self.num_channels = num_channels
         self.qkv_bias = qkv_bias
         self.max_grps = max_grps
+        self.threshold = threshold
         self.intermediate_size = int(self.mlp_ratio * self.hidden_size)
 
         self.encoder = ViTEncoder(
@@ -115,17 +118,29 @@ class GroupNet(pl.LightningModule):
             full_character_classes= self.f_c_classes,
             diacritic_classes= self.d_classes,
         )
-    
+
+        self.h_c_2_acc = HalfCharacterAccuracy(threshold= self.threshold)
+        self.h_c_1_acc = HalfCharacterAccuracy(threshold= self.threshold)
+        self.combined_h_c_acc = CombinedHalfCharAccuracy(threshold= self.threshold)
+        self.f_c_acc = CharacterAccuracy(threshold = self.threshold)
+        self.d_acc = DiacriticAccuracy(threshold = self.threshold)
+        self.acc = CharGrpAccuracy(threshold= self.threshold)
+        
+        self.h_c_2_loss = nn.CrossEntropyLoss(reduction= 'mean')
+        self.f_c_loss = nn.CrossEntropyLoss(reduction= 'mean')
+        self.h_c_1_loss = nn.CrossEntropyLoss(reduction= 'mean')
+        self.d_loss = nn.BCEWithLogitsLoss(reduction= 'mean')
+        
     def forward(self, x:torch.Tensor):
         batch_size = x.shape[0]
         enc_x = self.encoder(x)
         dec_x, pos_vis_attn_weights, chr_grp_attn_weights = self.decoder(enc_x)
-        half_char2_logits, half_char1_logits, char_logits, diac_logits = self.classifier(dec_x.view(-1, self.hidden_size))
+        h_c_2_logits, h_c_1_logits, f_c_logits, d_logits = self.classifier(dec_x.view(-1, self.hidden_size))
         return (
-            half_char2_logits.view(batch_size, self.max_grps, self.hidden_size),
-            half_char1_logits.view(batch_size, self.max_grps, self.hidden_size),
-            char_logits.view(batch_size, self.max_grps, self.hidden_size),
-            diac_logits.view(batch_size, self.max_grps, self.hidden_size),
+            h_c_2_logits.view(batch_size, self.max_grps, self.hidden_size),
+            h_c_1_logits.view(batch_size, self.max_grps, self.hidden_size),
+            f_c_logits.view(batch_size, self.max_grps, self.hidden_size),
+            d_logits.view(batch_size, self.max_grps, self.hidden_size),
         ), (pos_vis_attn_weights, chr_grp_attn_weights)
 
     def training_step(self, batch, batch_no):
@@ -133,6 +148,16 @@ class GroupNet(pl.LightningModule):
         # h_c_1 (bs, max_grps), f_c (bs, max_grps)
         # d_c (bs, max_grps, one hot enc.)
         x, h_c_2, h_c_1, f_c, d_c = batch
+        (h_c_2_logits, h_c_1_logits, f_c_logits, d_logits) = self.forward(x)[0]
+        loss = self.h_c_2_loss(input= h_c_2_logits.view(-1, self.hidden_size), target= h_c_2.view(-1, self.hidden_size)) \
+            + self.h_c_1_loss(input= h_c_1_logits.view(-1, self.hidden_size), target= h_c_1.view(-1, self.hidden_size)) \
+            + self.f_c_loss(input= f_c_logits.view(-1, self.hidden_size), target= f_c.view(-1, self.hidden_size)) \
+            + self.d_loss(input= d_logits.view(-1, self.hidden_size), target= d_c.view(-1, self.hidden_size))
+        
+        return loss
+
+        
+        
         
 
 

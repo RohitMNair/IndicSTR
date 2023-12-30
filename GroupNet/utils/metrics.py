@@ -1,5 +1,7 @@
 from torchmetrics import Metric
 from torch import nn
+from typing import Tuple
+from torch import Tensor
 import torch
 
 class CharGrpAccuracy(Metric):
@@ -8,13 +10,14 @@ class CharGrpAccuracy(Metric):
     Args:
         threshold: Threshold for classification
     """
-    def __init__(self, threshold= 0.5):
+    def __init__(self, threshold:float= 0.5):
         super().__init__()
         self.add_state("correct", default=torch.tensor(0), dist_reduce_fx="sum")
         self.add_state("total", default=torch.tensor(0), dist_reduce_fx="sum")
         self.thresh = threshold
 
-    def update(self, preds: tuple, target: tuple):
+    def update(self, preds: Tuple[Tensor, Tensor, Tensor, Tensor], 
+            target: Tuple[Tensor, Tensor, Tensor, Tensor]):
         """
         Update the metric
         Args:
@@ -144,40 +147,59 @@ class CombinedHalfCharAccuracy(Metric):
     Args:
         threshold (float): Threshold for classification
     """
-    def __init__(self, threshold):
+    def __init__(self, threshold:float= 0.5):
         super().__init__()
         self.add_state("correct", default=torch.tensor(0), dist_reduce_fx="sum")
         self.add_state("total", default=torch.tensor(0), dist_reduce_fx="sum")
         self.thresh = threshold
+        self.softmax = nn.Softmax(dim = 1)
 
-    def update(self, half_char_logits: tuple, half_char_target: tuple):
+    def update(self, half_char_logits:Tuple[Tensor, Tensor], half_char_target:Tuple[Tensor, Tensor]):
         """
         Update the metric
         Args:
             (half_char2_logits, half_char1_logits) (tensor, tensor): Half-Character Logits
             (half_char2_target, half_char1_target) (tensor, tensor): Corresponding Half-Character true labels 
         """
-        half_char2_logits, half_char1_logits = half_char_logits
-        half_char2_target, half_char1_target = half_char_target
-        half_char2_preds = torch.argmax(half_char2_logits, dim = 1)
-        half_char1_preds = torch.argmax(half_char1_logits, dim = 1)
-        assert half_char2_preds.shape == half_char2_target.shape
-        half_char2_bin_mask = half_char2_preds == half_char2_target
-        # Reshape to column tensor B x 1
-        half_char2_bin_mask = torch.reshape(half_char2_bin_mask, shape = (-1,1))
+        # Dim logits: Batch x # of classes
+        # Dim target: Batch
+        h_c_2_logits, h_c_1_logits = half_char_logits
+        h_c_2_target, h_c_1_target = half_char_target
 
-        assert half_char1_preds.shape == half_char1_target.shape
-        half_char1_bin_mask = half_char1_preds == half_char1_target
-        # Reshape to column tensor B x 1
-        half_char1_bin_mask = torch.reshape(half_char1_bin_mask,shape= (-1,1))
+        assert h_c_2_target.shape == h_c_1_target.shape, \
+            "Half character 1 and Half character 2 target shapes do not match"
 
-        # concat the column-vectors column-wise manner to get a B x 3 tensor
-        grp_pred = torch.cat((half_char2_bin_mask, half_char1_bin_mask), dim = 1)
-        # reduce the tensor column-wise, where, if all the element of the 
-        # row is True, the the value of that row will be true
-        temp = torch.all(grp_pred, dim= 1) # B x 1 Matrix
-        self.correct += torch.sum(temp, dim = -1)
-        self.total += temp.numel()
+        # get the probabilities
+        h_c_2_probs = self.softmax(h_c_2_logits)
+        h_c_1_probs = self.softmax(h_c_1_logits)
+
+        # get the max. probab. and the index for each pred. in batch
+        h_c_2_max_probs, h_c_2_pred = torch.max(h_c_2_probs, dim = 1)
+        h_c_1_max_probs, h_c_1_pred = torch.max(h_c_1_probs, dim = 1)
+
+        # get a binary mask for each item in batch
+        # where the max probs are above threshold
+        h_c_2_bin_mask = h_c_2_max_probs > self.thresh
+        h_c_1_bin_mask = h_c_1_max_probs > self.thresh
+        
+        # only considere those predictions where bin mask is true
+        h_c_2_pred_filtered = h_c_2_pred[h_c_2_bin_mask]
+        h_c_2_target_filtered = h_c_2_target[h_c_2_bin_mask]
+        h_c_1_pred_filtered = h_c_1_pred[h_c_1_bin_mask]
+        h_c_1_target_filtered = h_c_1_target[h_c_1_bin_mask]
+
+        # Ensure shapes match
+        assert h_c_2_pred_filtered.shape == h_c_2_target_filtered.shape,\
+                "shapes of half character 2 filtered and predicted do not match"
+        assert h_c_1_pred_filtered.shape == h_c_1_target_filtered.shape, \
+                "shapes of half character 1 filtered and predicted do not match"
+
+        # compute correct predictions
+        h_c_2_correct = h_c_2_pred_filtered == h_c_2_target_filtered
+        h_c_1_correct = h_c_1_pred_filtered == h_c_1_target_filtered
+
+        self.correct += (h_c_2_correct == h_c_1_correct).sum()
+        self.total += h_c_2_target.numel()
     
     def compute(self):
         return self.correct.float() / self.total
@@ -197,6 +219,7 @@ class CharacterAccuracy(Metric):
         self.add_state("correct", default=torch.tensor(0), dist_reduce_fx="sum")
         self.add_state("total", default=torch.tensor(0), dist_reduce_fx="sum")
         self.thresh = threshold
+        self.softmax = nn.Softmax(dim= 1)
     
     def update(self, char_logits: torch.Tensor, char_target: torch.Tensor):
         """
@@ -205,12 +228,26 @@ class CharacterAccuracy(Metric):
             char_logits (tensor): Character Logits
             char_target (tensor): Corresponding Character true labels 
         """
-        char_preds = torch.argmax(char_logits, dim = 1)
-        assert char_preds.shape == char_target.shape
-        # B element bool output
-        char_bin_mask = char_preds == char_target
-        self.correct += torch.sum(char_bin_mask, dim = -1)
-        self.total += char_bin_mask.numel()
+        
+        # Get the softmax probabilities
+        char_probs = self.softmax(char_logits)
+
+        # Get the maximum probabilities along with their indices
+        max_probs, char_preds = torch.max(char_probs, dim=1)
+
+        # Check if the maximum probability is greater than 0.5
+        char_bin_mask = max_probs > self.thresh
+
+        # Only consider predictions where the max probability is greater than 0.5
+        char_preds_filtered = char_preds[char_bin_mask]
+        char_target_filtered = char_target[char_bin_mask]
+
+        # Ensure shapes match
+        assert char_preds_filtered.shape == char_target_filtered.shape
+
+        # Compute accuracy
+        self.correct += (char_preds_filtered == char_target_filtered).sum()
+        self.total += char_preds.numel()
     
     def compute(self):
         return self.correct.float() / self.total
@@ -219,5 +256,9 @@ class CharacterAccuracy(Metric):
     def is_better(self):
         self.higher_is_better = True
 
-        
+# class CRR(Metric):
+#     """
+#     Measures character recognition rate
+#     threshold (measures)
+#     """
     
