@@ -14,6 +14,9 @@ class CharGrpAccuracy(Metric):
         super().__init__()
         self.add_state("correct", default=torch.tensor(0), dist_reduce_fx="sum")
         self.add_state("total", default=torch.tensor(0), dist_reduce_fx="sum")
+        self.is_differentiable = False
+        self.higher_is_better = True
+        self.full_state_update = False
         self.thresh = threshold
 
     def update(self, preds: Tuple[Tensor, Tensor, Tensor, Tensor], 
@@ -69,10 +72,6 @@ class CharGrpAccuracy(Metric):
 
     def compute(self):
         return self.correct.float() / self.total
-    
-    @property
-    def is_better(self):
-        self.higher_is_better = True
 
 class DiacriticAccuracy(Metric):
     """
@@ -84,6 +83,10 @@ class DiacriticAccuracy(Metric):
         super().__init__()
         self.add_state("correct", default=torch.tensor(0), dist_reduce_fx="sum")
         self.add_state("total", default=torch.tensor(0), dist_reduce_fx="sum")
+        self.is_differentiable = False
+        self.higher_is_better = True
+        self.full_state_update = False
+        self.sigmoid = nn.Sigmoid()
         self.thresh = threshold
     
     def update(self, diacritic_logits: torch.Tensor, diacritic_target: torch.Tensor):
@@ -94,12 +97,14 @@ class DiacriticAccuracy(Metric):
             diacritic_target (tensor): Corresponding Diacritic true labels 
         """
         assert diacritic_logits.shape == diacritic_target.shape
-        sigmoid = nn.Sigmoid() # convert to probability scores
-        diac_preds = sigmoid(diacritic_logits)
-        # B element bool output
-        diac_bin_mask = torch.all((diac_preds >= self.thresh) == (diacritic_target >= 1.), dim = 1)
-        self.correct += torch.sum(diac_bin_mask, dim = -1)
-        self.total += diac_bin_mask.numel()
+        d_probs = nn.functional.sigmoid(diacritic_logits)
+
+        # get the probs greater than thresh and the targets, get the 
+        # batch item bool mask where all the diacritics are predicted correctly
+        d_bin_mask = torch.all((d_probs >= self.thresh) == (diacritic_target >= 1.), dim = 1)
+        
+        self.correct += d_bin_mask.sum()
+        self.total += d_bin_mask.numel()
     
     def compute(self):
         return self.correct.float() / self.total
@@ -118,6 +123,10 @@ class HalfCharacterAccuracy(Metric):
         super().__init__()
         self.add_state("correct", default=torch.tensor(0), dist_reduce_fx="sum")
         self.add_state("total", default=torch.tensor(0), dist_reduce_fx="sum")
+        self.is_differentiable = False
+        self.higher_is_better = True
+        self.full_state_update = False
+        self.softmax = nn.Softmax(dim= 1)
         self.thresh = threshold
     
     def update(self, half_char_logits: torch.Tensor, half_char_target: torch.Tensor):
@@ -127,19 +136,28 @@ class HalfCharacterAccuracy(Metric):
             half_char_logits (tensor): Half Character Logits
             half_char_target (tensor): Corresponding Half Character true labels 
         """
-        half_char_preds = torch.argmax(half_char_logits, dim = 1)
-        assert half_char_preds.shape == half_char_target.shape
-        # B element bool output
-        half_char_bin_mask = half_char_preds == half_char_target
-        self.correct += torch.sum(half_char_bin_mask, dim = -1)
+        # get the probab.
+        h_c_probs = self.softmax(half_char_logits)
+
+        # get max. prob. value and the corresponding index
+        h_c_max_probs, h_c_pred  = torch.max(half_char_logits, dim = 1)
+
+        # get mask where max prob. is > thresh
+        h_c_bin_mask = h_c_max_probs >= self.thresh
+
+        # Only consider predictions where the max probability is greater than thresh
+        h_c_pred_filtered = h_c_pred[h_c_bin_mask]
+        h_c_target_filtered = half_char_target[h_c_bin_mask]
+
+        assert h_c_pred_filtered.shape == h_c_target_filtered.shape,\
+            "Half-Character prediction and target filtered shapes do not match"
+        
+        self.correct += (h_c_pred_filtered == h_c_target_filtered).sum()
         self.total += half_char_bin_mask.numel()
     
     def compute(self):
         return self.correct.float() / self.total
 
-    @property
-    def is_better(self):
-        self.higher_is_better = True
 
 class CombinedHalfCharAccuracy(Metric):
     """
@@ -151,6 +169,9 @@ class CombinedHalfCharAccuracy(Metric):
         super().__init__()
         self.add_state("correct", default=torch.tensor(0), dist_reduce_fx="sum")
         self.add_state("total", default=torch.tensor(0), dist_reduce_fx="sum")
+        self.is_differentiable = False
+        self.higher_is_better = True
+        self.full_state_update = False
         self.thresh = threshold
         self.softmax = nn.Softmax(dim = 1)
 
@@ -179,14 +200,15 @@ class CombinedHalfCharAccuracy(Metric):
 
         # get a binary mask for each item in batch
         # where the max probs are above threshold
-        h_c_2_bin_mask = h_c_2_max_probs > self.thresh
-        h_c_1_bin_mask = h_c_1_max_probs > self.thresh
+        h_c_2_bin_mask = h_c_2_max_probs >= self.thresh
+        h_c_1_bin_mask = h_c_1_max_probs >= self.thresh
+        combined_bin_mask = h_c_2_bin_mask == h_c_1_bin_mask
         
         # only considere those predictions where bin mask is true
-        h_c_2_pred_filtered = h_c_2_pred[h_c_2_bin_mask]
-        h_c_2_target_filtered = h_c_2_target[h_c_2_bin_mask]
-        h_c_1_pred_filtered = h_c_1_pred[h_c_1_bin_mask]
-        h_c_1_target_filtered = h_c_1_target[h_c_1_bin_mask]
+        h_c_2_pred_filtered = h_c_2_pred[combined_bin_mask]
+        h_c_2_target_filtered = h_c_2_target[combined_bin_mask]
+        h_c_1_pred_filtered = h_c_1_pred[combined_bin_mask]
+        h_c_1_target_filtered = h_c_1_target[combined_bin_mask]
 
         # Ensure shapes match
         assert h_c_2_pred_filtered.shape == h_c_2_target_filtered.shape,\
@@ -199,16 +221,13 @@ class CombinedHalfCharAccuracy(Metric):
         h_c_1_correct = h_c_1_pred_filtered == h_c_1_target_filtered
 
         self.correct += (h_c_2_correct == h_c_1_correct).sum()
-        self.total += h_c_2_target.numel()
+        self.total += h_c_2_target.numel() # batch size
     
     def compute(self):
         return self.correct.float() / self.total
 
-    @property
-    def is_better(self):
-        self.higher_is_better = True
     
-class CharacterAccuracy(Metric):
+class FullCharacterAccuracy(Metric):
     """
     Metric to calculate the accuracy of Full Character recognition in character groups
     Args:
@@ -218,43 +237,43 @@ class CharacterAccuracy(Metric):
         super().__init__()
         self.add_state("correct", default=torch.tensor(0), dist_reduce_fx="sum")
         self.add_state("total", default=torch.tensor(0), dist_reduce_fx="sum")
+        self.is_differentiable = False
+        self.higher_is_better = True
+        self.full_state_update = False
         self.thresh = threshold
         self.softmax = nn.Softmax(dim= 1)
     
-    def update(self, char_logits: torch.Tensor, char_target: torch.Tensor):
+    def update(self, full_char_logits: torch.Tensor, full_char_target: torch.Tensor):
         """
         Update the metric
         Args:
-            char_logits (tensor): Character Logits
-            char_target (tensor): Corresponding Character true labels 
+            full_char_logits (tensor): Character Logits
+            full_char_target (tensor): Corresponding Character true labels 
         """
         
         # Get the softmax probabilities
         char_probs = self.softmax(char_logits)
 
         # Get the maximum probabilities along with their indices
-        max_probs, char_preds = torch.max(char_probs, dim=1)
+        f_c_max_probs, f_c_preds = torch.max(char_probs, dim=1)
 
         # Check if the maximum probability is greater than 0.5
-        char_bin_mask = max_probs > self.thresh
+        f_c_bin_mask = f_c_max_probs >= self.thresh
 
-        # Only consider predictions where the max probability is greater than 0.5
-        char_preds_filtered = char_preds[char_bin_mask]
-        char_target_filtered = char_target[char_bin_mask]
+        # Only consider predictions where the max probability is greater than thresh
+        f_c_preds_filtered = f_c_preds[f_c_bin_mask]
+        f_c_target_filtered = full_char_target[f_c_bin_mask]
 
         # Ensure shapes match
-        assert char_preds_filtered.shape == char_target_filtered.shape
+        assert f_c_preds_filtered.shape == f_c_target_filtered.shape
 
         # Compute accuracy
-        self.correct += (char_preds_filtered == char_target_filtered).sum()
+        self.correct += (f_c_preds_filtered == f_c_target_filtered).sum()
         self.total += char_preds.numel()
     
     def compute(self):
         return self.correct.float() / self.total
 
-    @property
-    def is_better(self):
-        self.higher_is_better = True
 
 # class CRR(Metric):
 #     """
