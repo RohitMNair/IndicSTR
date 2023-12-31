@@ -17,6 +17,8 @@ class CharGrpAccuracy(Metric):
         self.is_differentiable = False
         self.higher_is_better = True
         self.full_state_update = False
+        self.softmax = nn.Softmax(dim = 1)
+        self.sigmoid = nn.Sigmoid()
         self.thresh = threshold
 
     def update(self, preds: Tuple[Tensor, Tensor, Tensor, Tensor], 
@@ -28,47 +30,46 @@ class CharGrpAccuracy(Metric):
             target (tuple | list): half character class number, character class number, 
                                     diacritics 1 or 2 Hot vector
         """
-        half_char2_logits, half_char1_logits,char_logits, diac_logits = preds
-        half_char2, half_char1, char, diac = target
-        # logits will be B * N 
-        half_char2_preds = torch.argmax(half_char2_logits, dim = 1)
-        half_char1_preds = torch.argmax(half_char1_logits, dim= 1)
-        char_preds = torch.argmax(char_logits, dim = 1)
-
-        assert diac_logits.shape == diac.shape
-        sigmoid = nn.Sigmoid() # convert to probability scores
-        diac_preds = sigmoid(diac_logits)
-        # B element bool
-        diac_bin_mask = torch.all((diac_preds >= self.thresh) == (diac >= 1.), dim = 1)
-        # reshape the mask to a column tensor B x 1
-        # So that we can append the masks of diacritic, half_char and char
-        # column-wise, inorder to compute correct predictions
-        diac_bin_mask = torch.reshape(diac_bin_mask,shape = (-1,1))
+        h_c_2_logits, h_c_1_logits, f_c_logits, d_logits = preds
+        h_c_2_target, h_c_1_target, f_c_target, d_target = target
         
-        assert half_char2_preds.shape == half_char2.shape
-        half_char2_bin_mask = half_char2_preds == half_char2
-        # Reshape to column tensor B x 1
-        half_char2_bin_mask = torch.reshape(half_char2_bin_mask, shape = (-1,1))
+        # calc probabs
+        h_c_2_probs = self.softmax(h_c_2_logits)
+        h_c_1_probs = self.softmax(h_c_1_logits)
+        f_c_probs = self.softmax(f_c_logits)
+        d_probs = self.sigmoid(d_logits)
 
-        assert half_char1_preds.shape == half_char1.shape
-        half_char1_bin_mask = half_char1_preds == half_char1
-        # Reshape to column tensor B x 1
-        half_char1_bin_mask = torch.reshape(half_char1_bin_mask,shape= (-1,1))
+        # get the max probab and correspondig index
+        h_c_2_max_probs, h_c_2_preds= torch.max(h_c_2_probs, dim= 1)
+        h_c_1_max_probs, h_c_1_preds = torch.max(h_c_1_probs, dim= 1)
+        f_c_max_probs, f_c_preds = torch.max(f_c_probs, dim= 1)
 
-        assert char_preds.shape == char.shape
-        char_bin_mask = char_preds == char
-        # reshape to a column tensor B x 1
-        char_bin_mask = torch.reshape(char_bin_mask, shape= (-1,1))
+        # bin mask with batch items with correct diacritic predictions
+        d_correct = torch.all((d_probs >= self.thresh) == (d_target >= 1.), dim = 1)
 
-        # concat the column-vectors column-wise manner to get a B x 3 tensor
-        grp_pred = torch.cat((half_char2_bin_mask, half_char1_bin_mask, char_bin_mask, diac_bin_mask), dim = 1)
-        # reduce the tensor column-wise, where, if all the element of the 
-        # row is True, the the value of that row will be true
-        temp = torch.all(grp_pred, dim= 1) # B x 1 Matrix
-        # Number of Trues in the matrix
-        self.correct += torch.sum(temp)
+        # bin mask for batch items having predictions greater than thresh
+        h_c_2_bin_mask = h_c_2_max_probs >= self.thresh
+        h_c_1_bin_mask = h_c_1_max_probs >= self.thresh
+        f_c_bin_mask = f_c_max_probs >= self.thresh
+
+        combined_mask = (h_c_2_bin_mask == h_c_1_bin_mask) == f_c_bin_mask
+
+        # consider only those data items where max probab > thresh
+        h_c_2_preds_filtered = h_c_2_preds[combined_mask]
+        h_c_1_preds_filtered = h_c_1_preds[combined_mask]
+        f_c_preds_filtered = f_c_preds[combined_mask]
+
+        h_c_2_target_filtered = h_c_2_target[combined_mask]
+        h_c_1_target_filtered = h_c_1_target[combined_mask]
+        f_c_target_filtered = f_c_target[combined_mask]
+
+        h_c_2_correct = h_c_2_preds_filtered == h_c_2_target_filtered
+        h_c_1_correct = h_c_1_preds_filtered == h_c_1_target_filtered
+        f_c_correct = f_c_preds_filtered == f_c_target_filtered   
+        
+        self.correct += ((d_correct == h_c_2_correct) == (h_c_1_correct == f_c_correct)).sum()
         # Get the batch size
-        self.total += diac_bin_mask.numel()
+        self.total += h_c_2_target.numel()
 
     def compute(self):
         return self.correct.float() / self.total
@@ -109,9 +110,6 @@ class DiacriticAccuracy(Metric):
     def compute(self):
         return self.correct.float() / self.total
 
-    @property
-    def is_better(self):
-        self.higher_is_better = True
 
 class HalfCharacterAccuracy(Metric):
     """
