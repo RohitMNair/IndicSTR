@@ -150,6 +150,7 @@ class LMDBDevanagariDataset(Dataset):
     def __init__(self, img_dir: str, charset:list or tuple, diacritics:list or tuple, 
                 halfer:str, half_charset:list or tuple, transforms: transforms.Compose,
                 false_sample_dir: Optional[str] = None, false_weight = 1):
+        super().__init__()
         self._t_env = None
         self._f_env = None
         self.root = img_dir
@@ -277,7 +278,7 @@ class LMDBDevanagariDataset(Dataset):
                         # half_character2 will keep track of half-character 
                         # not joined with the complete character
                         half_character2 = half_character1
-                        # the second half-char will be joined to the complete character
+                        # the first half-char will be joined to the complete character
                         half_character1 = self.rev_half_char_label_map[char]
 
             elif char in self.charset:

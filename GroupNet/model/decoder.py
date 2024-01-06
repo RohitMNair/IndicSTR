@@ -53,13 +53,13 @@ class CharGroupMHA(pl.LightningModule):
     def forward(self, query: torch.Tensor)-> tuple:
         attention_h_c_2, attention_probs_h_c_2 = self.scaled_dot_product_attention(
                                                                     query= self.query_proj_h_c_2(query),
-                                                                    key= self.key_proj_h_c_2(self.h_c_1_emb),
+                                                                    key= self.key_proj_h_c_2(self.h_c_2_emb),
                                                                     value= self.value_proj_h_c_2(self.h_c_2_emb),
                                                                     )
         attention_h_c_1, attention_probs_h_c_1 = self.scaled_dot_product_attention(
                                                                     query= self.query_proj_h_c_1(query), 
-                                                                    key= self.key_proj_h_c_1(self.h_c_2_emb),
-                                                                    value= self.value_proj_h_c_1(self.h_c_2_emb),                                                                  
+                                                                    key= self.key_proj_h_c_1(self.h_c_1_emb),
+                                                                    value= self.value_proj_h_c_1(self.h_c_1_emb),                                                                  
                                                                     )
         attention_f_c, attention_probs_f_c = self.scaled_dot_product_attention(
                                                                     query= self.query_proj_f_c(query),
