@@ -196,9 +196,8 @@ class CharacterAccuracy(Metric):
         super().__init__()
         self.add_state("correct", default=torch.tensor(0), dist_reduce_fx="sum")
         self.add_state("total", default=torch.tensor(0), dist_reduce_fx="sum")
-        self.is_differentiable = False
-        self.higher_is_better = True
-        self.full_state_update = False
+        
+
         self.thresh = threshold
     
     def update(self, char_logits: torch.Tensor, char_target: torch.Tensor):

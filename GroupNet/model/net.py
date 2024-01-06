@@ -5,9 +5,10 @@ from utils.metrics import (DiacriticAccuracy, FullCharacterAccuracy, CharGrpAccu
                    HalfCharacterAccuracy, CombinedHalfCharAccuracy, WRR)
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import OneCycleLR
-from typing import Any, Tuple
+from typing import Tuple
 from torch import Tensor
 from utils.transforms import LabelTransform
+
 import lightning.pytorch as pl
 import torch
 import torch.nn as nn
@@ -49,10 +50,9 @@ class GrpClassifier(pl.LightningModule):
         return half_char2_logits, half_char1_logits, char_logits, diac_logits 
 
 class GroupNet(pl.LightningModule):
-    def __init__(self,  half_character_2_embeddings: torch.Tensor, half_character_1_embeddings: torch.Tensor,
-                 full_character_embeddings: torch.Tensor, diacritics_embeddigs: torch.Tensor,
-                 half_character_classes:list, full_character_classes:list, diacritic_classes:list, halfer:str,
-                 hidden_size: int = 768, num_hidden_layers: int = 12, num_attention_heads: int = 12,
+    def __init__(self, emb_path:str, half_character_classes:list, full_character_classes:list,
+                 diacritic_classes:list, halfer:str, hidden_size: int = 768, 
+                 num_hidden_layers: int = 12, num_attention_heads: int = 12,
                  mlp_ratio: float= 4.0, hidden_act: str = "gelu", hidden_dropout_prob: float = 0.0,
                  attention_probs_dropout_prob: float = 0.0, initializer_range: float = 0.02,
                  layer_norm_eps: float = 1e-12, image_size: int = 224, patch_size: int = 16, 
@@ -60,10 +60,7 @@ class GroupNet(pl.LightningModule):
                  learning_rate: float= 1e-4, weight_decay: float= 1.0e-4, warmup_pct:float= 0.3
                  ):
         super().__init__()
-        self.h_c_2_emb = half_character_2_embeddings
-        self.h_c_1_emb = half_character_1_embeddings
-        self.f_c_emb = full_character_embeddings
-        self.d_emb = diacritics_embeddigs
+        self.emb_path = emb_path
         self.h_c_classes = ["[B]"] + half_character_classes
         self.f_c_classes = ["[B]"] + full_character_classes
         self.d_classes = diacritic_classes
@@ -88,8 +85,8 @@ class GroupNet(pl.LightningModule):
         self.pct_start = warmup_pct
 
         # non parameteric attributes
+        self.h_c_2_emb, self.h_c_1_emb, self.f_c_emb, self.d_emb = self._extract_char_embeddings()
         self.intermediate_size = int(self.mlp_ratio * self.hidden_size)
-        self._num_training_steps = None
         self.h_c_set = set(self.h_c_classes)
         self.f_c_set = set(self.f_c_classes)
         self.d_c_set = set(self.d_classes)
@@ -179,6 +176,25 @@ class GroupNet(pl.LightningModule):
         self.test_grp_acc = CharGrpAccuracy(threshold= self.threshold)
         self.test_wrr = WRR(threshold= self.threshold)
     
+    def _extract_char_embeddings(self)-> Tuple[Tensor, Tensor, Tensor, Tensor]:
+        """
+        Extracts the character embeddings from Img2Vec checkpoint
+        Returns:
+        - tuple(Tensor, Tensor, Tensor, Tensor): half-char 2, half-char 1, full-char
+                                                and diacritic embeddings from checkpoint
+        """
+        loaded_dict = torch.load(self.emb_path)
+
+        assert list(loaded_dict["h_c_classes"]) == self.h_c_classes,\
+              "Embedding Half-character classes and model half-character classes do not match"
+        assert list(loaded_dict["f_c_classes"]) == self.f_c_classes,\
+              "Embedding Full-character classes and model Full-character classes do not match"
+        assert list(loaded_dict["d_classes"]) == self.d_classes, \
+              "Embedding diacritic classes and model diacritic classes do not match"
+        
+        return loaded_dict["h_c_2_emb"], loaded_dict["h_c_1_emb"], loaded_dict["f_c_emb"], loaded_dict["d_emb"]
+
+
     def grp_class_encoder(self, grp: str)-> Tuple[int, int, int, Tensor]:
         """
         Encodes the group into class labels for Half-character 2, 1 and full character;

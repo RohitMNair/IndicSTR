@@ -64,6 +64,7 @@ class HindiLMDBDataset(Dataset):
                 label = ''.join(label.split()) # remove any white-spaces
                 # normalize unicode to remove redundant representations
                 label = unicodedata.normalize('NFKD', label)
+                # save the label and corresponding index
                 self.items.append(label)
                 self.processed_indexes.append(index)
         print("Length of labels ", len(self.items))
@@ -76,7 +77,7 @@ class HindiLMDBDataset(Dataset):
         img = None
         to_tensor = transforms.ToTensor()
         # keys assigned as per create_lmdb.py
-        img_key = f'image-{idx:09d}'.encode()
+        img_key = f'image-{index:09d}'.encode()
         
         with self.t_env.begin() as txn:
             imgbuf = txn.get(img_key)
@@ -86,6 +87,3 @@ class HindiLMDBDataset(Dataset):
             if self.transforms is not None:
                 img = self.transforms(img)
         return img, label
-
-            
-
