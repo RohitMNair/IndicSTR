@@ -1,44 +1,44 @@
-from lightning.pytorch.utilities.types import STEP_OUTPUT
 from encoder import ViTEncoder
 from decoder import GroupDecoder
 from utils.metrics import (DiacriticAccuracy, FullCharacterAccuracy, CharGrpAccuracy,
                    HalfCharacterAccuracy, CombinedHalfCharAccuracy, WRR)
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import OneCycleLR
-from typing import Tuple
+from typing import Tuple, Optional
 from torch import Tensor
-from utils.transforms import LabelTransform
+from data.tokenizer import Tokenizer
 
+import lightning.pytorch.loggers as pl_loggers
 import lightning.pytorch as pl
 import torch
 import torch.nn as nn
 
 class GrpClassifier(pl.LightningModule):
-    def __init__(self, hidden_size:int, half_character_classes:list,
-                 full_character_classes:list, diacritic_classes:list,):
+    def __init__(self, hidden_size:int, num_half_character_classes:int,
+                 num_full_character_classes:int, num_diacritic_classes:int):
         super().__init__()
         self.hidden_size= hidden_size
-        self.h_c_classes = half_character_classes
-        self.f_c_classes = full_character_classes
-        self.d_classes = diacritic_classes
+        self.num_h_c_classes = num_half_character_classes
+        self.num_f_c_classes = num_full_character_classes
+        self.num_d_classes = num_diacritic_classes
         self.half_character2_head = nn.Linear(
                                 in_features = self.hidden_size,
-                                out_features = len(self.h_c_classes) + 1, # extra node for no half-char
+                                out_features = self.num_h_c_classes, # extra node for no half-char
                                 bias = True
                             )
         self.half_character1_head = nn.Linear(
                                 in_features = self.hidden_size,
-                                out_features = len(self.h_c_classes) + 1,
+                                out_features = self.num_h_c_classes,
                                 bias = True
                             )
         self.character_head = nn.Linear(
                                 in_features = self.hidden_size,
-                                out_features = len(self.f_c_classes) + 1,
+                                out_features = self.num_f_c_classes,
                                 bias = True
                             )
         self.diacritic_head = nn.Linear( # multi-label classification hence no need for extra head
                                 in_features = self.hidden_size,
-                                out_features = len(self.d_classes),
+                                out_features = self.num_d_classes,
                                 bias = True
                             )
         
@@ -51,7 +51,7 @@ class GrpClassifier(pl.LightningModule):
 
 class GroupNet(pl.LightningModule):
     def __init__(self, emb_path:str, half_character_classes:list, full_character_classes:list,
-                 diacritic_classes:list, halfer:str, hidden_size: int = 768, 
+                 diacritic_classes:list, halfer:str, hidden_size: int = 768,
                  num_hidden_layers: int = 12, num_attention_heads: int = 12,
                  mlp_ratio: float= 4.0, hidden_act: str = "gelu", hidden_dropout_prob: float = 0.0,
                  attention_probs_dropout_prob: float = 0.0, initializer_range: float = 0.02,
@@ -61,9 +61,6 @@ class GroupNet(pl.LightningModule):
                  ):
         super().__init__()
         self.emb_path = emb_path
-        self.h_c_classes = ["[B]"] + half_character_classes
-        self.f_c_classes = ["[B]"] + full_character_classes
-        self.d_classes = diacritic_classes
         self.halfer = halfer
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
@@ -87,28 +84,18 @@ class GroupNet(pl.LightningModule):
         # non parameteric attributes
         self.h_c_2_emb, self.h_c_1_emb, self.f_c_emb, self.d_emb = self._extract_char_embeddings()
         self.intermediate_size = int(self.mlp_ratio * self.hidden_size)
-        self.h_c_set = set(self.h_c_classes)
-        self.f_c_set = set(self.f_c_classes)
-        self.d_c_set = set(self.d_classes)
-        # dict with class indexes as keys and characters as values
-        self.h_c_label_map = {k:c for k,c in enumerate(self.h_c_classes, start = 1)}
-        # 0 will be reserved for blank
-        self.f_c_label_map = {k:c for k,c in enumerate(self.f_c_classes, start = 1)}
-        # blank not needed for embedding as it is Binary classification of each diacritic
-        self.d_c_label_map = {k:c for k,c in enumerate(self.d_classes, start = 0)}
         
-        # dict with characters as keys and class indexes as values
-        self.rev_half_char_label_map = {c:k for k,c in enumerate(self.h_c_classes, start = 1)}
-        self.rev_char_label_map = {c:k for k,c in enumerate(self.f_c_classes, start = 1)}
-        self.rev_diacritirc_label_map = {c:k for k,c in enumerate(self.d_classes, start = 0)}
-
-        # initializations
-        self.label_transform = LabelTransform(
-            half_character_set= self.h_c_set,
-            full_character_set= self.f_c_set, 
-            diacritic_set= self.d_c_set, 
-            halfer= self.halfer,
+        self.tokenizer = Tokenizer(
+            half_character_classes= half_character_classes,
+            full_character_classes= full_character_classes,
+            diacritic_classes= diacritic_classes,
+            halfer= halfer,
+            threshold= threshold,
+            max_grps= max_grps
         )
+        self.num_h_c_classes = len(self.tokenizer.h_c_classes)
+        self.num_f_c_classes = len(self.tokenizer.f_c_classes)
+        self.num_d_classes =  len(self.tokenizer.d_classes)
         self.encoder = ViTEncoder(
             hidden_size= self.hidden_size,
             num_hidden_layers= self.num_hidden_layers,
@@ -141,9 +128,9 @@ class GroupNet(pl.LightningModule):
 
         self.classifier = GrpClassifier(
             hidden_size= self.hidden_size,
-            half_character_classes= self.h_c_classes,
-            full_character_classes= self.f_c_classes,
-            diacritic_classes= self.d_classes,
+            num_half_character_classes= self.num_h_c_classes,
+            num_full_character_classes= self.num_f_c_classes,
+            num_diacritic_classes= self.num_d_classes,
         )
        
         self.h_c_2_loss = nn.CrossEntropyLoss(reduction= 'mean')
@@ -178,103 +165,24 @@ class GroupNet(pl.LightningModule):
     
     def _extract_char_embeddings(self)-> Tuple[Tensor, Tensor, Tensor, Tensor]:
         """
-        Extracts the character embeddings from Img2Vec checkpoint
+        Extracts the character embeddings from embedding pth file. The pth file must
+        contain the following:
+        1) embeddings with names h_c_2_emb, h_c_1_emb, f_c_emb, & d_emb
+        2) character classes h_c_classes, f_c_classes & d_classes
         Returns:
         - tuple(Tensor, Tensor, Tensor, Tensor): half-char 2, half-char 1, full-char
                                                 and diacritic embeddings from checkpoint
         """
         loaded_dict = torch.load(self.emb_path)
 
-        assert list(loaded_dict["h_c_classes"]) == self.h_c_classes,\
+        assert list([self.tokenizer.BLANK] + loaded_dict["h_c_classes"]) == self.tokenizer.h_c_classes,\
               "Embedding Half-character classes and model half-character classes do not match"
-        assert list(loaded_dict["f_c_classes"]) == self.f_c_classes,\
+        assert list([self.tokenizer.BLANK] + loaded_dict["f_c_classes"]) == self.tokenizer.f_c_classes,\
               "Embedding Full-character classes and model Full-character classes do not match"
-        assert list(loaded_dict["d_classes"]) == self.d_classes, \
+        assert list(loaded_dict["d_classes"]) == self.tokenizer.d_classes, \
               "Embedding diacritic classes and model diacritic classes do not match"
         
         return loaded_dict["h_c_2_emb"], loaded_dict["h_c_1_emb"], loaded_dict["f_c_emb"], loaded_dict["d_emb"]
-
-
-    def grp_class_encoder(self, grp: str)-> Tuple[int, int, int, Tensor]:
-        """
-        Encodes the group into class labels for Half-character 2, 1 and full character;
-        One-Hot encodes diacritics.
-        Args:
-        - grp (str): Character group
-
-        Returns:
-        - tuple(Tensor, Tensor, Tensor, Tensor): class label for half-character 2,
-                                                half-character 1, full-character,
-                                                and diacritics (one hot encoded)
-        """
-        # get the character groupings
-        h_c_2_target, h_c_1_target, f_c_target, d_target = 0, 0, 0, torch.tensor([0. for i in range(len(self.d_classes))])
-        for i, char in enumerate(grp):
-            halfer_cntr = 0
-            if char in self.h_c_set and i + 1 < len(grp) and grp[i+1] == self.halfer:
-                    # for half character occurence
-                    if h_c_1_target == 0:
-                        # half_character1 will always track the half-character
-                        # which is joined with the complete character
-                        h_c_1_target = self.rev_half_char_label_map[char]
-                    else: # there are more than 1 half-characters
-                        # half_character2 will keep track of half-character 
-                        # not joined with the complete character
-                        h_c_2_target = h_c_1_target
-                        # the first half-char will be joined to the complete character
-                        h_c_1_target = self.rev_half_char_label_map[char]
-
-            elif char in self.f_c_set:
-                assert f_c_target == 0,\
-                       f"2 full Characters have occured {grp}-{char}"
-                f_c_target = self.rev_char_label_map[char]
-
-            elif char in self.d_c_set:
-                # for diacritic occurence
-                assert d_target[self.rev_diacritirc_label_map[char]] == 0.0, \
-                    f"2 same matras occured {grp}-{char}-{d_target}"
-                
-                d_target[self.rev_diacritirc_label_map[char]] = 1.
-
-            elif char == self.halfer and halfer_cntr < 2:
-                halfer_cntr += 1
-
-            elif char == self.halfer and halfer_cntr >=2 :
-                raise Exception(f"More than 2 half-characters occured")
-
-            else:
-                raise Exception(f"Character {char} not found in vocabulary")
-        
-        assert torch.sum(d_target, dim = -1) <= 2, f"More than 2 diacritics occured {grp}-{d_target}"
-
-        return h_c_2_target, h_c_1_target, f_c_target, d_target
-    
-    def label_encoder(self, label:str)-> Tuple[Tensor, Tensor, Tensor, Tensor]:
-        """
-        Converts the text label into classes indexes for classification
-        Args:
-        - label (str): The label to be encoded
-
-        Returns:
-        - tuple(int, int, int, Tensor): half-char 2 class index, half-char 1
-                                        class index, full char class index,
-                                        diacritic one hot encoding
-        """
-        grps = self.label_transform.hindi_label_transform(label= label)
-        h_c_2_target, h_c_1_target, f_c_target, d_target = (
-                                                            torch.zeros(self.max_grps), 
-                                                            torch.zeros(self.max_grps),
-                                                            torch.zeros(self.max_grps),
-                                                            torch.zeros(self.max_grps, len(self.d_classes))
-                                                        )
-        # truncate grps if grps exceed max_grps
-        if len(grps) > self.max_grps:
-            grps = grps[:self.max_grps]
-
-        for idx,grp in enumerate(grps, start= 0):
-            h_c_2_target[idx], h_c_1_target[idx], f_c_target[idx], d_target[idx] = self.grp_class_encoder(grp=grp)
-
-        return h_c_2_target, h_c_1_target, f_c_target, d_target
     
     def forward(self, x:torch.Tensor)-> Tuple[Tuple[Tensor, Tensor, Tensor, Tensor], Tuple[Tensor, Tensor]] :
         batch_size = x.shape[0]
@@ -282,10 +190,10 @@ class GroupNet(pl.LightningModule):
         dec_x, pos_vis_attn_weights, chr_grp_attn_weights = self.decoder(enc_x)
         h_c_2_logits, h_c_1_logits, f_c_logits, d_logits = self.classifier(dec_x.view(-1, self.hidden_size))
         return (
-            h_c_2_logits.view(batch_size, self.max_grps, len(self.h_c_classes)),
-            h_c_1_logits.view(batch_size, self.max_grps, len(self.h_c_classes)),
-            f_c_logits.view(batch_size, self.max_grps, len(self.f_c_classes)),
-            d_logits.view(batch_size, self.max_grps, len(self.d_classes)),
+            h_c_2_logits.view(batch_size, self.max_grps, self.num_h_c_classes),
+            h_c_1_logits.view(batch_size, self.max_grps, self.num_h_c_classes),
+            f_c_logits.view(batch_size, self.max_grps, self.num_f_c_classes),
+            d_logits.view(batch_size, self.max_grps, self.num_d_classes),
         ), (pos_vis_attn_weights, chr_grp_attn_weights)
 
     def training_step(self, batch, batch_no)-> Tensor:
@@ -293,13 +201,13 @@ class GroupNet(pl.LightningModule):
         imgs, labels = batch
         batch_size = imgs.shape[0]
         h_c_2_targets, h_c_1_targets, f_c_targets, d_targets = (
-                                  torch.zeros(batch_size, self.max_grps, len(self.h_c_classes)),
-                                  torch.zeros(batch_size, self.max_grps, len(self.h_c_classes)),
-                                  torch.zeros(batch_size, self.max_grps, len(self.f_c_classes)),
-                                  torch.zeros(batch_size, self.max_grps, len(self.d_classes)),
+                                  torch.zeros(batch_size, self.max_grps, self.num_h_c_classes),
+                                  torch.zeros(batch_size, self.max_grps, self.num_h_c_classes),
+                                  torch.zeros(batch_size, self.max_grps, self.num_f_c_classes),
+                                  torch.zeros(batch_size, self.max_grps, self.num_d_classes),
                                 )
         for idx,label in enumerate(labels, start= 0):
-            h_c_2_targets[idx], h_c_1_targets[idx], f_c_targets[idx], d_targets[idx] = self.label_encoder(label)
+            h_c_2_targets[idx], h_c_1_targets[idx], f_c_targets[idx], d_targets[idx] = self.tokenizer.label_encoder(label)
 
         (h_c_2_logits, h_c_1_logits, f_c_logits, d_logits) = self.forward(imgs)[0]
 
@@ -352,6 +260,9 @@ class GroupNet(pl.LightningModule):
             "train_grp_acc_epoch": self.train_grp_acc,
         }
         self.log_dict(log_dict_epoch, on_step = False, on_epoch = True, prog_bar = False, logger = True, sync_dist = True)  
+
+        if batch_no % 10000:
+             self._log_tb_images(imgs, None, "train")
         return loss
 
     def configure_optimizers(self)-> dict:
@@ -371,18 +282,49 @@ class GroupNet(pl.LightningModule):
             }
         }
 
+    def _log_tb_images(self, viz_batch:Tensor, labels:Optional[tuple], mode:str= "test") -> None:
+        """
+        Function to display a batch and its predictions to tensorboard
+        Args:
+        - viz_batch (Tensor): images of a batch to be visualized
+        - labels (tuple): corresponding lables of images in the batch
+        - mode (str): "test" | "train" | "val"
+
+        Returns: None
+        """
+        assert mode in ("test", "train", "val"), "Invalid mode"
+        # Get tensorboard logger
+        tb_logger = None
+        for logger in self.trainer.loggers:
+            if isinstance(logger, pl_loggers.TensorBoardLogger):
+                tb_logger = logger.experiment
+                break
+
+        if tb_logger is None:
+                raise ValueError('TensorBoard Logger not found')
+
+        if mode == "test" or mode == "val":
+            assert labels is not None, "Labels cannot be none in test or val mode"
+            # Log the images (Give them different names)
+            for img_idx in range(viz_batch.shape[0]):
+                tb_logger.add_image(f"{mode}/{labels[img_idx]}_{img_idx}", viz_batch[img_idx], 0)
+        
+        else:
+            assert labels is None, "Labels must be none in training mode"
+            tb_logger.add_images(f"{mode}", viz_batch, self.global_step)
+
     def validation_step(self, batch, batch_idx)-> None:
         # batch: img (BS x C x H x W), label (BS)
         imgs, labels = batch
         batch_size = imgs.shape[0]
         h_c_2_targets, h_c_1_targets, f_c_targets, d_targets = (
-                                  torch.zeros(batch_size, self.max_grps, len(self.h_c_classes)),
-                                  torch.zeros(batch_size, self.max_grps, len(self.h_c_classes)),
-                                  torch.zeros(batch_size, self.max_grps, len(self.f_c_classes)),
-                                  torch.zeros(batch_size, self.max_grps, len(self.d_classes)),
+                                  torch.zeros(batch_size, self.max_grps, self.num_h_c_classes),
+                                  torch.zeros(batch_size, self.max_grps, self.num_h_c_classes),
+                                  torch.zeros(batch_size, self.max_grps, self.num_f_c_classes),
+                                  torch.zeros(batch_size, self.max_grps, self.num_d_classes),
                                 )
         for idx,label in enumerate(labels, start= 0):
-            h_c_2_targets[idx], h_c_1_targets[idx], f_c_targets[idx], d_targets[idx] = self.label_encoder(label)
+            h_c_2_targets[idx], h_c_1_targets[idx], f_c_targets[idx], d_targets[idx] = self.tokenizer.label_encoder(label)
 
         (h_c_2_logits, h_c_1_logits, f_c_logits, d_logits) = self.forward(imgs)[0]
 
@@ -427,19 +369,22 @@ class GroupNet(pl.LightningModule):
             "val_grp_acc_epoch": self.train_grp_acc,
         }
         self.log_dict(log_dict_epoch, on_step = False, on_epoch = True, prog_bar = False, logger = True, sync_dist = True)
+        labels = self.tokenizer.decode((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits))
+        if batch_idx % 10000:
+            self._log_tb_images(imgs, labels, "val")
 
     def test_step(self, batch, batch_idx)-> None:
         # batch: img (BS x C x H x W), label (BS)
         imgs, labels = batch
         batch_size = imgs.shape[0]
         h_c_2_targets, h_c_1_targets, f_c_targets, d_targets = (
-                                  torch.zeros(batch_size, self.max_grps, len(self.h_c_classes)),
-                                  torch.zeros(batch_size, self.max_grps, len(self.h_c_classes)),
-                                  torch.zeros(batch_size, self.max_grps, len(self.f_c_classes)),
-                                  torch.zeros(batch_size, self.max_grps, len(self.d_classes)),
+                                  torch.zeros(batch_size, self.max_grps, self.num_h_c_classes),
+                                  torch.zeros(batch_size, self.max_grps, self.num_h_c_classes),
+                                  torch.zeros(batch_size, self.max_grps, self.num_f_c_classes),
+                                  torch.zeros(batch_size, self.max_grps, self.num_d_classes),
                                 )
         for idx,label in enumerate(labels, start= 0):
-            h_c_2_targets[idx], h_c_1_targets[idx], f_c_targets[idx], d_targets[idx] = self.label_encoder(label)
+            h_c_2_targets[idx], h_c_1_targets[idx], f_c_targets[idx], d_targets[idx] = self.tokenizer.label_encoder(label)
 
         (h_c_2_logits, h_c_1_logits, f_c_logits, d_logits) = self.forward(imgs)[0]
 
@@ -485,6 +430,5 @@ class GroupNet(pl.LightningModule):
             "test_grp_acc_epoch": self.train_grp_acc,
         }
         self.log_dict(log_dict_epoch, on_step = False, on_epoch = True, prog_bar = False, logger = True, sync_dist = True)
-
-    def decode(self, batch):
-        pass
+        labels = self.tokenizer.decode((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits))
+        self._log_tb_images(imgs, labels, "test")

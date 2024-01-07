@@ -1,4 +1,4 @@
-from torchvision import transforms, utils
+from torchvision import transforms
 import torch
 import numpy as np
 from pathlib import Path
@@ -17,9 +17,9 @@ class RescaleTransform(object):
 
   def __call__(self, image):
         h, w = image.shape[1:]
+        aspect_ratio = w / h
         if isinstance(self.output_size, int):
             new_h, new_w = self.output_size, self.output_size
-            aspect_ratio = w / h
             if w > h:
                 new_h = int(new_w / aspect_ratio)
             else:
@@ -27,9 +27,9 @@ class RescaleTransform(object):
         else:
             new_h, new_w = self.output_size
             if h > w:
-                new_w = w
+                new_w = int(new_h * aspect_ratio)
             else:
-                new_h = h
+                new_h = int(new_w / aspect_ratio)
 
         new_h, new_w = int(new_h), int(new_w)
         image = transforms.Resize((new_h, new_w), antialias=True)(image)

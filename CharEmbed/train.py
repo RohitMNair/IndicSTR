@@ -5,8 +5,6 @@ from utils.transforms import RescaleTransform, PadTransform
 from lightning.pytorch.callbacks import StochasticWeightAveraging
 from omegaconf import DictConfig
 from hydra.utils import instantiate
-from model.Img2Vec import Img2Vec
-
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 torch.set_float32_matmul_precision('medium')
