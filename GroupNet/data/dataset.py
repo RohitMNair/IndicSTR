@@ -11,46 +11,32 @@ from torchvision.io import read_image
 from torchvision import transforms
 from pathlib import Path
 from typing import Tuple
-from utils.transforms import LabelTransform
 
 class HindiLMDBDataset(Dataset):
-    def __init__(self, data_dir: str, charset:list or tuple, diacritics:list or tuple, 
-                halfer:str, half_charset:list or tuple, transforms: transforms.Compose,
-                max_grps:int= 25):
+    def __init__(self, data_dir: str, transforms: transforms.Compose, max_grps:int= 25):
         super().__init__()
-        self._t_env = None
-        self.data_dir = Path(data_dir)
+        self._env = None
+        self.data_dir = data_dir
         self.transforms = transforms
-        self.f_c = ["[B]"] + charset
-        self.f_c_set = set(self.f_c)
-        self.d_c = diacritics
-        self.d_c_set = set(self.d_c)
-        self.halfer = halfer
-        self.h_c = ["[B]"] + half_charset
-        self.h_c_set = set(self.h_c)
         self.max_grps = max_grps
         self.items = []
-        self.num_samples = self._preprocess_labels()
         self.processed_indexes = []
+        self.num_samples = self._preprocess_labels()
 
     def __del__(self):
-        if self._t_env is not None:
-            self._t_env.close()
+        if self._env is not None:
+            self._env.close()
             self._env = None
-
-        if self._f_env is not None:
-            self._f_env.close()
-            self._f_env = None
 
     def _create_env(self, root):
         return lmdb.open(root, max_readers=1, readonly=True, create=False,
                          readahead=False, meminit=False, lock=False)
 
     @property
-    def t_env(self):
-        if self._t_env is None:
-            self._t_env = self._create_env(self.data_dir)
-        return self._t_env
+    def env(self):
+        if self._env is None:
+            self._env = self._create_env(self.data_dir)
+        return self._env
     
     def _preprocess_labels(self):
         with self._create_env(self.data_dir) as env, env.begin() as txn:
@@ -79,7 +65,7 @@ class HindiLMDBDataset(Dataset):
         # keys assigned as per create_lmdb.py
         img_key = f'image-{index:09d}'.encode()
         
-        with self.t_env.begin() as txn:
+        with self.env.begin() as txn:
             imgbuf = txn.get(img_key)
             buf = io.BytesIO(imgbuf)
             img = Image.open(buf).convert('RGB')
@@ -87,3 +73,6 @@ class HindiLMDBDataset(Dataset):
             if self.transforms is not None:
                 img = self.transforms(img)
         return img, label
+
+    def __len__(self):
+        return len(self.items)

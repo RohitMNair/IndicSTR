@@ -7,7 +7,7 @@ from typing import Union
 class CharGroupMHA(pl.LightningModule):
     def __init__(self, hidden_size: int, full_character_embeddings:torch.Tensor,
                  half_character_1_embeddings:torch.Tensor, half_character_2_embeddings:torch.Tensor,
-                 diacritics_embeddigs:torch.Tensor, dropout:float= 0.0)->None:
+                 diacritics_embeddigs:torch.Tensor, char_embed_dim:int, dropout:float= 0.0)->None:
         super().__init__()
         self.dropout = nn.Dropout(dropout)
         self.hidden_size = hidden_size
@@ -15,29 +15,30 @@ class CharGroupMHA(pl.LightningModule):
         self.h_c_1_emb = half_character_1_embeddings
         self.h_c_2_emb = half_character_2_embeddings
         self.d_emb = diacritics_embeddigs
+        self.char_embed_dim = char_embed_dim
         self.projection_size = self.hidden_size // 4
 
         # half character 2
         self.query_proj_h_c_2 = nn.Linear(self.hidden_size, self.projection_size, bias = True)
-        self.key_proj_h_c_2 = nn.Linear(self.hidden_size, self.projection_size, bias = True)
-        self.value_proj_h_c_2 = nn.Linear(self.hidden_size, self.projection_size, bias = True)
+        self.key_proj_h_c_2 = nn.Linear(self.char_embed_dim, self.projection_size, bias = True)
+        self.value_proj_h_c_2 = nn.Linear(self.char_embed_dim, self.projection_size, bias = True)
         
         # half character 1
         self.query_proj_h_c_1 = nn.Linear(self.hidden_size, self.projection_size, bias = True)
-        self.key_proj_h_c_1 = nn.Linear(self.hidden_size, self.projection_size, bias= True)
-        self.value_proj_h_c_1 = nn.Linear(self.hidden_size, self.projection_size, bias= True)
+        self.key_proj_h_c_1 = nn.Linear(self.char_embed_dim, self.projection_size, bias= True)
+        self.value_proj_h_c_1 = nn.Linear(self.char_embed_dim, self.projection_size, bias= True)
 
         # full character
         self.query_proj_f_c = nn.Linear(self.hidden_size, self.projection_size, bias = True)
-        self.key_proj_f_c = nn.Linear(self.hidden_size, self.projection_size , bias= True)
-        self.value_proj_f_c = nn.Linear(self.hidden_size, self.projection_size , bias= True)
+        self.key_proj_f_c = nn.Linear(self.char_embed_dim, self.projection_size , bias= True)
+        self.value_proj_f_c = nn.Linear(self.char_embed_dim, self.projection_size , bias= True)
         
         # diacritic
         self.query_proj_d = nn.Linear(self.hidden_size, self.projection_size, bias = True)
-        self.key_proj_d = nn.Linear(self.hidden_size, self.projection_size, bias = True)
-        self.value_proj_d = nn.Linear(self.hidden_size, self.projection_size, bias = True)
+        self.key_proj_d = nn.Linear(self.char_embed_dim, self.projection_size, bias = True)
+        self.value_proj_d = nn.Linear(self.char_embed_dim, self.projection_size, bias = True)
 
-        self.out_proj = nn.Linear(self.projection_size, self.hidden_size, bias= True)
+        self.out_proj = nn.Linear(self.hidden_size, self.hidden_size, bias= True)
 
 
     def scaled_dot_product_attention(self, query: torch.Tensor, key: torch.Tensor, value: torch.Tensor)-> tuple:
@@ -51,6 +52,12 @@ class CharGroupMHA(pl.LightningModule):
         return context, attention_probs
 
     def forward(self, query: torch.Tensor)-> tuple:
+        # move the embeddings to the correct device
+        self.h_c_2_emb = self.h_c_2_emb.to(self.device)
+        self.h_c_1_emb = self.h_c_1_emb.to(self.device)
+        self.f_c_emb = self.f_c_emb.to(self.device)
+        self.d_emb = self.d_emb.to(self.device)
+
         attention_h_c_2, attention_probs_h_c_2 = self.scaled_dot_product_attention(
                                                                     query= self.query_proj_h_c_2(query),
                                                                     key= self.key_proj_h_c_2(self.h_c_2_emb),
@@ -73,11 +80,11 @@ class CharGroupMHA(pl.LightningModule):
                                                                     )
         attention = torch.concat((attention_h_c_2, attention_h_c_1, attention_f_c, attention_d), dim= -1)
         attention = self.out_proj(attention)
-        return attention, attention_probs_h_c_2, attention_probs_h_c_1, attention_probs_f_c, attention_probs_d
+        return attention, (attention_probs_h_c_2, attention_probs_h_c_1, attention_probs_f_c, attention_probs_d)
         
 class GroupDecoder(pl.LightningModule):
     def __init__(self, half_character_2_embeddings:torch.Tensor, half_character_1_embeddings:torch.Tensor,
-                 full_character_embeddings:torch.Tensor, diacritics_embeddigs:torch.Tensor, 
+                 full_character_embeddings:torch.Tensor, diacritics_embeddigs:torch.Tensor, char_embed_dim:int,
                  hidden_size:int= 1024, mlp_ratio:float= 4.0, layer_norm_eps:float= 1.0e-12, max_grps:int= 25,
                  num_heads:int= 6, hidden_dropout_prob:float= 0.0, attention_probs_dropout_prob:float= 0.0)-> None:
         super().__init__()
@@ -93,8 +100,9 @@ class GroupDecoder(pl.LightningModule):
         self.intermediate_size = int(self.mlp_ratio * self.hidden_size)
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.hidden_dropout_prob = hidden_dropout_prob
+        self.char_embed_dim = char_embed_dim
 
-        self.positional_encodings = nn.Parameter(torch.randn(1, self.max_grps, self.hidden_size))
+        self.positional_encodings = nn.Parameter(torch.randn(self.max_grps, self.hidden_size))
         self.hidden_dropout1 = nn.Dropout(self.hidden_dropout_prob)
         self.pos_norm = nn.LayerNorm(normalized_shape= self.hidden_size, eps=self.layer_norm_eps)
         self.pos_vis_mha = nn.MultiheadAttention(
@@ -112,6 +120,7 @@ class GroupDecoder(pl.LightningModule):
                                         half_character_1_embeddings= self.h_c_1_emb,
                                         half_character_2_embeddings= self.h_c_2_emb,
                                         diacritics_embeddigs= self.d_emb,
+                                        char_embed_dim= self.char_embed_dim,
                                         dropout = self.attention_probs_dropout_prob,
                                     )
         self.hidden_dropout3 = nn.Dropout(self.hidden_dropout_prob)
@@ -123,9 +132,9 @@ class GroupDecoder(pl.LightningModule):
         self.hidden_dropout5 = nn.Dropout(self.hidden_dropout_prob)
 
     def forward(self, x:torch.Tensor)->tuple:
-        x = self.hidden_dropout1(x + self.positional_encodings)
+        x = self.hidden_dropout1(x)
         x_1, pos_vis_attn_weights = self.pos_vis_mha(
-                                                query= self.pos_norm(self.positional_encodings),
+                                                query= self.pos_norm(self.positional_encodings.expand(x.shape[0],-1,-1)),
                                                 key= x,
                                                 value= x,
                                                 need_weights = True,
@@ -139,4 +148,3 @@ class GroupDecoder(pl.LightningModule):
         x = x + self.hidden_dropout5(x_1)
         
         return x, pos_vis_attn_weights, chr_grp_attn_weights
-

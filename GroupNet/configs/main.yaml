@@ -1,23 +1,12 @@
+img_size: 128
+log_dir: /global/D1/homes/rohitn/GrpNet_logs
+name: glyph_train
+version: ${oc.env:SLURM_JOB_ID}
+ckpt_path: null
 
-Img2Vec:
-  _target_: model.Img2Vec.Img2Vec
-  character_classes: ['अ', 'आ', 'इ', 'ई', 'उ', 'ऊ', 'ऋ', 'ॠ', 'ए', 'ऐ',
-                      'ओ', 'औ', 'ॲ', 'ऍ', 'ऑ',
-                      'क', 'ख', 'ग', 'घ', 'ङ',
-                      'च', 'छ', 'ज', 'झ', 'ञ',
-                      'ट', 'ठ', 'ड', 'ढ', 'ण',
-                      'त', 'थ', 'द', 'ध', 'न',
-                      'प', 'फ', 'ब', 'भ', 'म',
-                      'य', 'र', 'ल', 'ळ', 'व', 'श',
-                      'ष', 'स', 'ह',
-                      #'क़', 'ख़', 'ग़', 'ज़', 'झ़', 'ड़', 'ढ़', 'फ़' # these will be handled by the matra '़'
-                      # For real text, each of these will be converted to vyanjan + matra
-                      'ॐ', '₹', '।', '!', '$', '₹', '%', '॥','ॽ', # characters that occur independently
-                      '०','१','२','३','४','५','६' ,'७' ,'८' ,'९',
-                      ]
-
-  diacritic_classes: ['ा','ि','ी','ु','ू','ृ', 'े','ै', 'ो', 'ौ', 'ॅ', 'ॉ', 'ँ','ं', 'ः', '़'] # ensure that halfer is not in this
-    
+GrpNet:
+  _target_: model.net.GroupNet
+  emb_path: /home/rohitn/IndianSTR/Img2Vec/GroupNet/embeddings/resnet_50_r256.pth
   half_character_classes: [ 'क', 'ख', 'ग', 'घ', 'ङ',
                             'च', 'छ', 'ज', 'झ', 'ञ',
                             'ट', 'ठ', 'ड', 'ढ', 'ण',
@@ -25,67 +14,74 @@ Img2Vec:
                             'प', 'फ', 'ब', 'भ', 'म',
                             'य', 'र', 'ल', 'ळ', 'व', 'श',
                             'ष', 'स', 'ह']
-  optimizer:
-    _partial_: true
-    _target_: torch.optim.AdamW
-  lr: 1.0e-4
-  weight_decay: 0.0
+  full_character_classes: ['अ', 'आ', 'इ', 'ई', 'उ', 
+                          'ऊ', 'ऋ', 'ॠ', 'ए', 'ऐ',
+                          'ओ', 'औ', 'ॲ', 'ऍ', 'ऑ',
+                          'क', 'ख', 'ग', 'घ', 'ङ',
+                          'च', 'छ', 'ज', 'झ', 'ञ',
+                          'ट', 'ठ', 'ड', 'ढ', 'ण',
+                          'त', 'थ', 'द', 'ध', 'न',
+                          'प', 'फ', 'ब', 'भ', 'म',
+                          'य', 'र', 'ल', 'ळ', 'व', 
+                          'श', 'ष', 'स', 'ह',
+                          'ॐ', '₹', '।', '!', '$', '₹', '%', '॥','ॽ', # characters that occur independently
+                          '०','१','२','३','४','५','६' ,'७' ,'८' ,'९', # numerals
+                          ]
+  diacritic_classes: ['ा','ि','ी','ु','ू','ृ', 'े','ै', 'ो', 'ौ', 'ॅ', 'ॉ', 'ँ','ं', 'ः', '़'] # ensure that halfer is not in this 
+  halfer: '्'
+  hidden_size: 768
+  num_hidden_layers: 12
+  num_attention_heads: 12
+  mlp_ratio: 4.0
+  hidden_dropout_prob: 0.1
+  attention_probs_dropout_prob: 0.1
+  initializer_range: 0.02
+  layer_norm_eps: 1.0e-12
+  image_size: ${img_size}
+  patch_size: 8
+  num_channels: 3
+  qkv_bias: true
+  max_grps: 25
   threshold: 0.5
-  backbone: ${model}
-  rep_dim: 1024
-  activation:
-    _target_: torch.nn.GELU
+  learning_rate: 1.0e-4
+  weight_decay: 1.0e-4
+  warmup_pct: 0.3
     
 transforms:
   rotation: 90
   img_size: ${img_size}
   
 datamodule:
-  _target_: data.module.LMDBDevanagariDataModule
-  charset: ${Img2Vec.character_classes}
-  diacritics: ${Img2Vec.diacritic_classes}
-  halfer: '्'
-  half_charset: ${Img2Vec.half_character_classes}
-  train_dir: /home/rohitn/D1/HindiGlyphSynth/glyph_train_complete_lmdb
+  _target_: data.module.LMDBHindiDataModule
+  train_dir: /home/rohitn/D1/HindiGlyphSynth/train1_lmdb
   val_dir: /home/rohitn/D1/HindiGlyphSynth/val_lmdb
-  false_sample_dir: /home/rohitn/D1/HindiGlyphSynth/coco
-  false_train_wt: 3
-  false_val_wt: 1
   test_dir: null
-  delimiter: "\t"
-  batch_size: 32
+  max_grps: 25
+  batch_size: 32 
   num_workers: 8
+  drop_last: false
 
 csv_logger:
   _target_: lightning.pytorch.loggers.CSVLogger
-  save_dir: /global/D1/homes/rohitn/Hindi_embed_logs # Do not put "/" at the end
-  name: Img2Vec_${backbone}_r1024
-  version: ${oc.env:SLURM_JOB_ID} # using SLURM Job Id which is obtained in the train script
+  save_dir: ${log_dir} # Do not put "/" at the end
+  name: ${name}
+  version: ${version} # using SLURM Job Id which is obtained in the train script
   # version: 82574/train2 # specify a sub-folder if continuing training
 
 tensorboard_logger:
   _target_: lightning.pytorch.loggers.TensorBoardLogger
-  save_dir:  ${csv_logger.save_dir}
-  name: ${csv_logger.name}
-  version: ${csv_logger.version}
+  save_dir:  ${log_dir}
+  name: ${name}
+  version: ${version}
 
 model_checkpoint:
   _target_: lightning.pytorch.callbacks.ModelCheckpoint
-  dirpath: ${csv_logger.save_dir}/${csv_logger.name}/${csv_logger.version}/checkpoints/      
-  filename: "{epoch}-{val_loss:.2f}-{val_acc:.2f}"
-  monitor: val_acc
-  mode: max
-  save_top_k: 3
-  save_last: true
-  
-early_stopping:
-  _target_: lightning.pytorch.callbacks.early_stopping.EarlyStopping
-  monitor: val_loss
+  dirpath: ${log_dir}/${name}/${version}/checkpoints/      
+  filename: "{epoch}-{val_loss_epoch:.2f}-{val_wrr_epoch:.2f}"
+  monitor: val_loss_epoch
   mode: min
-  min_delta: 0.01
-  patience: 1
-  verbose: true
-  check_finite: true
+  save_top_k: 2
+  save_last: true
 
 training:
   _target_: lightning.pytorch.Trainer
@@ -96,9 +92,9 @@ training:
   check_val_every_n_epoch: 1
   gradient_clip_val: 10
   precision: 32-true
-  log_every_n_steps: 5
+  log_every_n_steps: 100
   num_nodes: 1
 
 hydra:
   run:
-    dir: ${csv_logger.save_dir}/${csv_logger.name}/${csv_logger.version}
+    dir: ${log_dir}/${name}/${version}

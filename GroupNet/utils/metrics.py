@@ -14,9 +14,6 @@ class CharGrpAccuracy(Metric):
         super().__init__()
         self.add_state("correct", default=torch.tensor(0), dist_reduce_fx="sum")
         self.add_state("total", default=torch.tensor(0), dist_reduce_fx="sum")
-        self.is_differentiable = False
-        self.higher_is_better = True
-        self.full_state_update = False
         self.softmax = nn.Softmax(dim = 1)
         self.sigmoid = nn.Sigmoid()
         self.thresh = threshold
@@ -49,7 +46,13 @@ class CharGrpAccuracy(Metric):
         h_c_1_bin_mask = h_c_1_max_probs >= self.thresh
         f_c_bin_mask = f_c_max_probs >= self.thresh
 
-        combined_mask = (h_c_2_bin_mask == h_c_1_bin_mask) == f_c_bin_mask
+        combined_mask = torch.all(
+                            torch.stack(
+                                [h_c_2_bin_mask, h_c_1_bin_mask, f_c_bin_mask],
+                                dim= 0
+                                ),
+                            dim= 0
+                        )
 
         # consider only those data items where max probab > thresh
         h_c_2_preds_filtered = h_c_2_preds[combined_mask]
@@ -64,7 +67,7 @@ class CharGrpAccuracy(Metric):
         h_c_1_correct = h_c_1_preds_filtered == h_c_1_target_filtered
         f_c_correct = f_c_preds_filtered == f_c_target_filtered   
         d_correct = torch.all((d_probs >= self.thresh) == (d_target >= 1.), dim = 1)
-        combined_correct = torch.stack([h_c_2_correct, h_c_1_correct, f_c_correct, d_correct], dim= 0)
+        combined_correct = torch.stack([h_c_2_correct, h_c_1_correct, f_c_correct, d_correct[combined_mask]], dim= 0)
 
         self.correct += torch.all(combined_correct, dim= 0).sum()
         self.total += h_c_2_target.numel() # batch size
@@ -82,9 +85,6 @@ class DiacriticAccuracy(Metric):
         super().__init__()
         self.add_state("correct", default=torch.tensor(0), dist_reduce_fx="sum")
         self.add_state("total", default=torch.tensor(0), dist_reduce_fx="sum")
-        self.is_differentiable = False
-        self.higher_is_better = True
-        self.full_state_update = False
         self.sigmoid = nn.Sigmoid()
         self.thresh = threshold
     
@@ -119,9 +119,6 @@ class HalfCharacterAccuracy(Metric):
         super().__init__()
         self.add_state("correct", default=torch.tensor(0), dist_reduce_fx="sum")
         self.add_state("total", default=torch.tensor(0), dist_reduce_fx="sum")
-        self.is_differentiable = False
-        self.higher_is_better = True
-        self.full_state_update = False
         self.softmax = nn.Softmax(dim= 1)
         self.thresh = threshold
     
@@ -164,9 +161,6 @@ class CombinedHalfCharAccuracy(Metric):
         super().__init__()
         self.add_state("correct", default=torch.tensor(0), dist_reduce_fx="sum")
         self.add_state("total", default=torch.tensor(0), dist_reduce_fx="sum")
-        self.is_differentiable = False
-        self.higher_is_better = True
-        self.full_state_update = False
         self.thresh = threshold
         self.softmax = nn.Softmax(dim = 1)
 
@@ -197,7 +191,7 @@ class CombinedHalfCharAccuracy(Metric):
         # where the max probs are above threshold
         h_c_2_bin_mask = h_c_2_max_probs >= self.thresh
         h_c_1_bin_mask = h_c_1_max_probs >= self.thresh
-        combined_bin_mask = h_c_2_bin_mask == h_c_1_bin_mask
+        combined_bin_mask = torch.all(torch.stack([h_c_2_bin_mask, h_c_1_bin_mask], dim= 0), dim= 0)
         
         # only considere those predictions where bin mask is true
         h_c_2_pred_filtered = h_c_2_pred[combined_bin_mask]
@@ -221,7 +215,6 @@ class CombinedHalfCharAccuracy(Metric):
     
     def compute(self):
         return self.correct.float() / self.total
-
     
 class FullCharacterAccuracy(Metric):
     """
@@ -279,10 +272,9 @@ class WRR(Metric):
         super().__init__()
         self.add_state("correct", default=torch.tensor(0), dist_reduce_fx="sum")
         self.add_state("total", default=torch.tensor(0), dist_reduce_fx="sum")
-        self.is_differentiable = False
         self.thresh = threshold
         self.sigmoid = nn.Sigmoid()
-        self.softmax = nn.Softmax(dim= 1)
+        self.softmax = nn.Softmax(dim= 2)
 
     def update(self, logits:Tuple[Tensor, Tensor, Tensor, Tensor], 
                targets:Tuple[Tensor, Tensor, Tensor, Tensor]):
@@ -303,9 +295,9 @@ class WRR(Metric):
         "For diacritics the logits and target must be of shape (Batch Size, Max Groups, # of classes)"
         
         # get probab values
-        h_c_2_probabs = self.softmax(h_c_2_logits, dim= 2)
-        h_c_1_probabs = self.softmax(h_c_1_logits, dim = 2)
-        f_c_probabs = self.softmax(f_c_logits, dim= 2)
+        h_c_2_probabs = self.softmax(h_c_2_logits)
+        h_c_1_probabs = self.softmax(h_c_1_logits)
+        f_c_probabs = self.softmax(f_c_logits)
         d_probabs = self.sigmoid(d_logits)
 
         # get the max probab and the corresponding index
@@ -317,24 +309,25 @@ class WRR(Metric):
         h_c_2_bin_mask = torch.all(h_c_2_max_probs >= self.thresh, dim= 1)
         h_c_1_bin_mask = torch.all(h_c_1_max_probs >= self.thresh, dim= 1)
         f_c_bin_mask = torch.all(f_c_max_probs >= self.thresh, dim= 1)
+        combined_bin_mask = torch.all(torch.stack([h_c_2_bin_mask, h_c_1_bin_mask, f_c_bin_mask],dim= 0), dim= 0)
 
         # filter out batch items with low confidence predictions
-        h_c_2_preds_filtered = h_c_2_preds[h_c_2_bin_mask]
-        h_c_1_preds_filtered = h_c_1_preds[h_c_1_bin_mask]
-        f_c_preds_filtered = f_c_preds[f_c_bin_mask]
+        h_c_2_preds_filtered = h_c_2_preds[combined_bin_mask]
+        h_c_1_preds_filtered = h_c_1_preds[combined_bin_mask]
+        f_c_preds_filtered = f_c_preds[combined_bin_mask]
 
-        h_c_2_target_filtered = h_c_2_target[h_c_2_bin_mask]
-        h_c_1_target_filtered = h_c_1_target[h_c_1_bin_mask]
-        f_c_target_filtered = f_c_target[f_c_bin_mask]
+        h_c_2_target_filtered = h_c_2_target[combined_bin_mask]
+        h_c_1_target_filtered = h_c_1_target[combined_bin_mask]
+        f_c_target_filtered = f_c_target[combined_bin_mask]
 
         h_c_2_correct = torch.all(h_c_2_preds_filtered == h_c_2_target_filtered, dim= 1)
         h_c_1_correct = torch.all(h_c_1_preds_filtered == h_c_1_target_filtered, dim= 1)
         f_c_correct = torch.all(f_c_preds_filtered == f_c_target_filtered, dim= 1)
         d_correct = torch.all(torch.all((d_probabs >= self.thresh) == (d_target >= 1.), dim= 2), dim= 1)
-        combined_correct = torch.all(torch.stack([h_c_2_correct, h_c_1_correct, f_c_correct, d_correct], dim= 0), dim= 0)
+        combined_correct = torch.all(torch.stack([h_c_2_correct, h_c_1_correct, f_c_correct, d_correct[combined_bin_mask]], dim= 0), dim= 0)
         
         self.correct += combined_correct.sum()
-        self.total =+ h_c_2_target.shape[0]
+        self.total += h_c_2_target.numel()
 
     def compute(self):
         return self.correct.float() / self.total    

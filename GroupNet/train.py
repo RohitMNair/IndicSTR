@@ -29,6 +29,7 @@ def main(cfg: DictConfig):
             std=[0.229, 0.224, 0.225]
         ),
         ])
+
     datamodule = instantiate(cfg.datamodule, transforms = composed)
 
     csv_logger = instantiate(cfg.csv_logger)
@@ -44,7 +45,7 @@ def main(cfg: DictConfig):
                     logger = [csv_logger, tensorboard_logger]
                 )
     
-    model = instantiate(cfg.Img2Vec)
+    model = instantiate(cfg.GrpNet)
     trainer.fit(model, datamodule, ckpt_path = cfg.ckpt_path)
     
 if __name__ == "__main__":

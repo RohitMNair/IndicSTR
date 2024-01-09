@@ -64,7 +64,7 @@ class ViTEncoder(pl.LightningModule):
                             encoder_stride = encoder_stride,
                             )
         
-        self.vit = ViTModel(self.config)
+        self.vit = ViTModel(self.config, add_pooling_layer= False)
 
     def forward(self, x):
         return self.vit(x, output_attentions= False, output_hidden_states= False).last_hidden_state

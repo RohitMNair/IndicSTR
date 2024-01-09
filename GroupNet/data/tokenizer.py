@@ -15,15 +15,16 @@ class Tokenizer:
                 halfer:str, threshold:float= 0.5, max_grps:int= 25):
         """
         Args:
-        - half_character_set (set)
-        - full_character_set (set)
-        - diacritic_set (set)
-        - halfer (set): diacritic used to represent a half-character
+        - half_character_set (list)
+        - full_character_set (list)
+        - diacritic_set (list)
+        - halfer (str): diacritic used to represent a half-character
         - threshold (float): classification threshold (default: 0.5)
         """
         self.h_c_classes = [Tokenizer.BLANK] + half_character_classes
         self.f_c_classes = [Tokenizer.BLANK] + full_character_classes
-        self.d_classes = diacritic_classes        
+        self.d_classes = diacritic_classes      
+        self._normalize_charset()
         self.h_c_set = set(self.h_c_classes)
         self.f_c_set = set(self.f_c_classes)
         self.d_c_set = set(self.d_classes)
@@ -45,12 +46,15 @@ class Tokenizer:
     
     def _normalize_charset(self)-> None:
         """
-        Function to normalize the charset provided
+        Function to normalize the charset provided and converts the charset from list to tuple
         """
-        
-        
+        self.h_c_classes = tuple([unicodedata.normalize("NFKD", c) for c in self.h_c_classes])
+        self.f_c_classes = tuple([unicodedata.normalize("NFKD", c) for c in self.f_c_classes])
+        self.d_classes = tuple([unicodedata.normalize("NFKD", c) for c in self.d_classes])
+
     def _check_h_c(self, label:str, idx:int)-> bool:
         """
+        Method to check if the character at index idx in label is a half-char or not
         Returns:
         - bool: True if the current index is a half character or not
         """
@@ -60,6 +64,7 @@ class Tokenizer:
 
     def _check_f_c(self, label, idx):
         """
+        Method to check if the character at index idx in label is a full-char or not
         Returns:
         - bool: True if the current idx is a full character
         """
@@ -70,6 +75,7 @@ class Tokenizer:
 
     def _check_d_c(self, label, idx):
         """
+        Function to check if the character at index idx in label is a diacritic or not
         Returns:
         - bool: True if the current idx is a diacritic
         """
@@ -93,23 +99,26 @@ class Tokenizer:
         for grp in grps:
             # allowed character category counts
             h_c_count, f_c_count, d_c_count = 2, 1, 2
-            for char in grp:
-
-                if self.halfer == char[1] and char[0] in self.h_c_set and h_c_count > 0:
+            i = 0
+            while i < len(grp):
+                if i + 1 < len(grp) and self.halfer == grp[i + 1] and grp[i] in self.h_c_set and h_c_count > 0:
                     h_c_count -= 1
-                elif char in self.f_c_set and f_c_count > 0:
+                    i += 1
+                elif grp[i] in self.f_c_set and f_c_count > 0:
                     f_c_count -= 1
-                elif char in self.d_c_set and d_c_count > 0:
+                elif grp[i] in self.d_c_set and d_c_count > 0:
                     d_c_count -= 1
                 else:
-                    if char not in self.f_c_set or \
-                        char not in self.d_c_set or char not in self.h_c_set:
-                        raise Exception(f"Invalid {char} in group {grp} for label {label}")
+                    if grp[i] not in self.f_c_set or \
+                        grp[i] not in self.d_c_set or grp[i] not in self.h_c_set:
+                        raise Exception(f"Invalid {grp[i]} in group {grp} for label {label}")
                     elif f_c_count == 1:
                         raise Exception(f"There are no full character in group {grp} for {label}")
                     else:
                         raise Exception(f"Invalid number of half {h_c_count}, full {f_c_count} \
-                                        or diacritic characters {d_c_count} in {grp} for {label}")      
+                                        or diacritic characters {d_c_count} in {grp} for {label}")  
+                i += 1
+
         return True
 
     def hindi_label_transform(self, label:str)-> tuple:
@@ -209,7 +218,7 @@ class Tokenizer:
 
         return h_c_2_target, h_c_1_target, f_c_target, d_target
 
-    def label_encoder(self, label:str)-> Tuple[Tensor, Tensor, Tensor, Tensor]:
+    def label_encoder(self, label:str, device:torch.device)-> Tuple[Tensor, Tensor, Tensor, Tensor]:
         """
         Converts the text label into classes indexes for classification
         Args:
@@ -222,10 +231,10 @@ class Tokenizer:
         """
         grps = self.hindi_label_transform(label= label)
         h_c_2_target, h_c_1_target, f_c_target, d_target = (
-                                                            torch.zeros(self.max_grps), 
-                                                            torch.zeros(self.max_grps),
-                                                            torch.zeros(self.max_grps),
-                                                            torch.zeros(self.max_grps, len(self.d_classes))
+                                                            torch.zeros(self.max_grps, dtype= torch.long), 
+                                                            torch.zeros(self.max_grps, dtype= torch.long),
+                                                            torch.zeros(self.max_grps, dtype= torch.long),
+                                                            torch.zeros(self.max_grps, len(self.d_classes), dtype= torch.long)
                                                         )
         # truncate grps if grps exceed max_grps
         if len(grps) > self.max_grps:
@@ -234,7 +243,7 @@ class Tokenizer:
         for idx,grp in enumerate(grps, start= 0):
             h_c_2_target[idx], h_c_1_target[idx], f_c_target[idx], d_target[idx] = self.grp_class_encoder(grp=grp)
 
-        return h_c_2_target, h_c_1_target, f_c_target, d_target
+        return h_c_2_target.to(device), h_c_1_target.to(device), f_c_target.to(device), d_target.to(device)
     
     def _decode_grp(self, h_c_2_pred:Tensor,h_c_1_pred:Tensor, f_c_pred:Tensor, 
                     d_pred:Tensor, d_max:Tensor)-> str:
@@ -251,15 +260,13 @@ class Tokenizer:
         Returns:
         - str: the group formed
         """
-        assert len(h_c_2_pred) == len(h_c_1_pred) == len(f_c_pred) == 1, \
-            "Logits of a single group needs to be provided, half or full char preds have length > 1"
         assert len(d_pred) == len(d_max) == 2, \
-            "Diacritic preds and max must contain 2 elements for 2"
+            "Diacritic preds and max must contain 2 elements for 2 diacritics"
         
         grp = ""
-        grp += self.h_c_label_map[h_c_2_pred] + self.h_c_label_map[h_c_1_pred] + self.f_c_label_map[f_c_pred] \
-              + self.d_c_label_map[d_pred[0]] if d_max[0] else "" \
-              + self.d_c_label_map[d_pred[1]] if d_max[1] else ""
+        grp += self.h_c_label_map[int(h_c_2_pred.item())] + self.h_c_label_map[int(h_c_1_pred.item())] + self.f_c_label_map[int(f_c_pred.item())] \
+              + self.d_c_label_map[int(d_pred[0].item())] if d_max[0] else "" \
+              + self.d_c_label_map[int(d_pred[1].item())] if d_max[1] else ""
         
         return grp.replace("[B]", "") # remove all [B] occurences
                 

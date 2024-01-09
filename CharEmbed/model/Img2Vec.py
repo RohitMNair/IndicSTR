@@ -190,7 +190,7 @@ class Img2Vec(pl.LightningModule):
 
     def predict_step(self, batch, batch_no):
         x, half_char2, half_char1, char, diac = batch
-        half_char2_logits, half_char2_logits, char_logits, diac_logits = self.forward(x)
+        half_char2_logits, half_char1_logits, char_logits, diac_logits = self.forward(x)
 
         half_char2_indices = torch.argmax(half_char2_logits, dim = 1)
         half_char1_indices = torch.argmax(half_char1_logits, dim= 1)
