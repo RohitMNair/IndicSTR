@@ -70,7 +70,7 @@ class CharGrpAccuracy(Metric):
         combined_correct = torch.stack([h_c_2_correct, h_c_1_correct, f_c_correct, d_correct[combined_mask]], dim= 0)
 
         self.correct += torch.all(combined_correct, dim= 0).sum()
-        self.total += h_c_2_target.numel() # batch size
+        self.total += h_c_2_target.numel() # batch size * max grps
 
     def compute(self):
         return self.correct.float() / self.total
@@ -103,7 +103,7 @@ class DiacriticAccuracy(Metric):
         d_bin_mask = torch.all((d_probs >= self.thresh) == (diacritic_target >= 1.), dim = 1)
         
         self.correct += d_bin_mask.sum()
-        self.total += d_bin_mask.numel()
+        self.total += d_bin_mask.numel() # batch * max grps
     
     def compute(self):
         return self.correct.float() / self.total
@@ -146,7 +146,7 @@ class HalfCharacterAccuracy(Metric):
             "Half-Character prediction and target filtered shapes do not match"
         
         self.correct += (h_c_pred_filtered == h_c_target_filtered).sum()
-        self.total += half_char_target.numel()
+        self.total += half_char_target.numel() # batch * max grps
     
     def compute(self):
         return self.correct.float() / self.total
@@ -211,7 +211,7 @@ class CombinedHalfCharAccuracy(Metric):
         combined_correct = torch.stack([h_c_2_correct, h_c_1_correct], dim= 0)
 
         self.correct += torch.all(combined_correct, dim= 0).sum()
-        self.total += h_c_2_target.numel() # batch size
+        self.total += h_c_2_target.numel() # batch size * max grps
     
     def compute(self):
         return self.correct.float() / self.total
@@ -255,7 +255,7 @@ class FullCharacterAccuracy(Metric):
 
         # Compute accuracy
         self.correct += (f_c_preds_filtered == f_c_target_filtered).sum()
-        self.total += full_char_target.numel()
+        self.total += full_char_target.numel() # batch * grps
     
     def compute(self):
         return self.correct.float() / self.total
@@ -327,7 +327,7 @@ class WRR(Metric):
         combined_correct = torch.all(torch.stack([h_c_2_correct, h_c_1_correct, f_c_correct, d_correct[combined_bin_mask]], dim= 0), dim= 0)
         
         self.correct += combined_correct.sum()
-        self.total += h_c_2_target.numel()
+        self.total += h_c_2_target.shape[0] # batch size
 
     def compute(self):
         return self.correct.float() / self.total    

@@ -15,7 +15,6 @@ def checkImageIsValid(imageBin):
     img = Image.open(io.BytesIO(imageBin)).convert('RGB')
     return np.prod(img.size) > 0
 
-
 def writeCache(env, cache):
     with env.begin(write=True) as txn:
         for k, v in cache.items():

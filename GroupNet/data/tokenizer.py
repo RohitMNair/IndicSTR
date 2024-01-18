@@ -99,6 +99,7 @@ class Tokenizer:
         for grp in grps:
             # allowed character category counts
             h_c_count, f_c_count, d_c_count = 2, 1, 2
+            d_seen = []
             i = 0
             while i < len(grp):
                 if i + 1 < len(grp) and self.halfer == grp[i + 1] and grp[i] in self.h_c_set and h_c_count > 0:
@@ -106,17 +107,24 @@ class Tokenizer:
                     i += 1
                 elif grp[i] in self.f_c_set and f_c_count > 0:
                     f_c_count -= 1
-                elif grp[i] in self.d_c_set and d_c_count > 0:
+                elif grp[i] in self.d_c_set and d_c_count == 2:
                     d_c_count -= 1
+                    d_seen.append(grp[i])
+                elif grp[i] in self.d_c_set and d_c_count != 2 and grp[i] not in d_seen:
+                    d_c_count -= 1
+                elif grp[i] in self.d_c_set and d_c_count != 2 and grp[i] in d_seen:
+                    print(f"Duplicate Diacritic in group {grp} for label {label}")
+                    return False
                 else:
                     if grp[i] not in self.f_c_set or \
                         grp[i] not in self.d_c_set or grp[i] not in self.h_c_set:
-                        raise Exception(f"Invalid {grp[i]} in group {grp} for label {label}")
+                        print(f"Invalid {grp[i]} in group {grp} for label {label}")
                     elif f_c_count == 1:
-                        raise Exception(f"There are no full character in group {grp} for {label}")
+                        print(f"There are no full character in group {grp} for {label}")
                     else:
-                        raise Exception(f"Invalid number of half {h_c_count}, full {f_c_count} \
-                                        or diacritic characters {d_c_count} in {grp} for {label}")  
+                        print(f"Invalid number of half {h_c_count}, full {f_c_count} \
+                                        or diacritic characters {d_c_count} in {grp} for {label}")
+                    return False  
                 i += 1
 
         return True

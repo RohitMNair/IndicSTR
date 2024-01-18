@@ -7,20 +7,28 @@ import io
 from PIL import Image
 from torch import Tensor
 from torch.utils.data import Dataset
-from torchvision.io import read_image
 from torchvision import transforms
-from pathlib import Path
 from typing import Tuple
+from .tokenizer import Tokenizer
 
 class HindiLMDBDataset(Dataset):
-    def __init__(self, data_dir: str, transforms: transforms.Compose, max_grps:int= 25):
+    def __init__(self, data_dir: str, transforms: transforms.Compose,
+                 half_character_classes:list, full_character_classes:list, 
+                 diacritic_classes:list, halfer:str):
         super().__init__()
         self._env = None
         self.data_dir = data_dir
         self.transforms = transforms
-        self.max_grps = max_grps
         self.items = []
         self.processed_indexes = []
+        self.tokenizer = Tokenizer(
+            half_character_classes= half_character_classes,
+            full_character_classes= full_character_classes,
+            diacritic_classes= diacritic_classes,
+            halfer= halfer,
+            threshold= 0.5,
+            max_grps= 50,
+        )
         self.num_samples = self._preprocess_labels()
 
     def __del__(self):
@@ -37,7 +45,7 @@ class HindiLMDBDataset(Dataset):
         if self._env is None:
             self._env = self._create_env(self.data_dir)
         return self._env
-    
+
     def _preprocess_labels(self):
         with self._create_env(self.data_dir) as env, env.begin() as txn:
             num_samples = int(txn.get('num-samples'.encode()))
@@ -51,6 +59,8 @@ class HindiLMDBDataset(Dataset):
                 # normalize unicode to remove redundant representations
                 label = unicodedata.normalize('NFKD', label)
                 # save the label and corresponding index
+                if len(self.tokenizer.hindi_label_transform(label)) == 0:
+                    continue
                 self.items.append(label)
                 self.processed_indexes.append(index)
         print("Length of labels ", len(self.items))

@@ -1,12 +1,12 @@
 img_size: 128
 log_dir: /global/D1/homes/rohitn/GrpNet_logs
-name: glyph_train
+name: vitstr_train
 version: ${oc.env:SLURM_JOB_ID}
 ckpt_path: null
 
 GrpNet:
-  _target_: model.net.GroupNet
-  emb_path: /home/rohitn/IndianSTR/Img2Vec/GroupNet/embeddings/resnet_50_r256.pth
+  _target_: model.net.ViTSTR
+  emb_path: /home/rohitn/IndianSTR/Img2Vec/GroupNet/embeddings/resnet_50_r1024.pth
   half_character_classes: [ 'क', 'ख', 'ग', 'घ', 'ङ',
                             'च', 'छ', 'ज', 'झ', 'ञ',
                             'ट', 'ठ', 'ड', 'ढ', 'ण',
@@ -41,10 +41,10 @@ GrpNet:
   patch_size: 8
   num_channels: 3
   qkv_bias: true
-  max_grps: 25
+  # max_grps: 1
   threshold: 0.5
   learning_rate: 1.0e-4
-  weight_decay: 1.0e-4
+  weight_decay: 0.0
   warmup_pct: 0.3
     
 transforms:
@@ -53,13 +53,16 @@ transforms:
   
 datamodule:
   _target_: data.module.LMDBHindiDataModule
-  train_dir: /home/rohitn/D1/HindiGlyphSynth/train1_lmdb
-  val_dir: /home/rohitn/D1/HindiGlyphSynth/val_lmdb
+  train_dir: /home/rohitn/D1/HindiGlyphSynth/hindi_synth_lmdb
+  val_dir: /home/rohitn/D1/HindiGlyphSynth/hindi_real
   test_dir: null
-  max_grps: 25
   batch_size: 32 
   num_workers: 8
   drop_last: false
+  half_character_classes: ${GrpNet.half_character_classes}
+  full_character_classes: ${GrpNet.full_character_classes}
+  diacritic_classes: ${GrpNet.diacritic_classes}
+  halfer: ${GrpNet.halfer}
 
 csv_logger:
   _target_: lightning.pytorch.loggers.CSVLogger
@@ -88,7 +91,7 @@ training:
   accelerator: gpu # options are cpu or gpu
   strategy: ddp # only use when gpu is available
   devices: 2
-  max_epochs: 20
+  max_epochs: 5
   check_val_every_n_epoch: 1
   gradient_clip_val: 10
   precision: 32-true

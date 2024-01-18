@@ -16,9 +16,12 @@ class LMDBHindiDataModule(pl.LightningDataModule):
         num_workers (int): Number of processes for the DataSet and DataLoader
         drop_last (bool): Whether to drop the last batch if its not divisible by the batch size
     """
-    def __init__(self, train_dir:str, val_dir:str, test_dir:Optional[str], 
-                transforms: transforms.Compose, max_grps:int= 25, batch_size:int =32, 
+    def __init__(self, train_dir:str, val_dir:str, test_dir:Optional[str],
+                half_character_classes:list, full_character_classes:list, 
+                diacritic_classes:list, halfer:str,
+                transforms: transforms.Compose, batch_size:int =32, 
                 num_workers:int= 4, drop_last:bool= False, 
+                
                 ):
         super().__init__()
         self.train_dir = train_dir
@@ -27,25 +30,37 @@ class LMDBHindiDataModule(pl.LightningDataModule):
         self.transforms = transforms
         self.batch_size = batch_size
         self.num_workers = num_workers
-        self.max_grps = max_grps
         self.drop_last = drop_last
+        self.half_character_classes = half_character_classes
+        self.full_character_classes = full_character_classes
+        self.diacritic_classes = diacritic_classes
+        self.halfer = halfer
 
     def setup(self, stage):
         self.train_dataset = HindiLMDBDataset(
                                 data_dir= self.train_dir,
                                 transforms= self.transforms,
-                                max_grps= self.max_grps
+                                half_character_classes= self.half_character_classes,
+                                full_character_classes= self.full_character_classes,
+                                diacritic_classes= self.diacritic_classes,
+                                halfer= self.halfer,
                             )
         self.val_dataset = HindiLMDBDataset(
                                 data_dir= self.train_dir,
                                 transforms= self.transforms,
-                                max_grps= self.max_grps
+                                half_character_classes= self.half_character_classes,
+                                full_character_classes= self.full_character_classes,
+                                diacritic_classes= self.diacritic_classes,
+                                halfer= self.halfer,
                             )
         if self.test_dir is not None:
             self.test_dataset = HindiLMDBDataset(
                                 data_dir= self.train_dir,
                                 transforms= self.transforms,
-                                max_grps= self.max_grps
+                                half_character_classes= self.half_character_classes,
+                                full_character_classes= self.full_character_classes,
+                                diacritic_classes= self.diacritic_classes,
+                                halfer= self.halfer,
                             )
         else:
             self.test_dataset = None
