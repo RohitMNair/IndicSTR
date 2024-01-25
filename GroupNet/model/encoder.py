@@ -1,4 +1,4 @@
-from transformers import ViTConfig, ViTModel
+from transformers import ViTConfig, ViTModel, FocalNetConfig, FocalNetModel
 import torch.nn as nn
 import torch
 import lightning.pytorch as pl
@@ -69,31 +69,38 @@ class ViTEncoder(pl.LightningModule):
     def forward(self, x):
         return self.vit(x, output_attentions= False, output_hidden_states= False).last_hidden_state
 
-# class FocalNetEncoder(pl.LightningModule):
-#     def __init__(self,hidden_size: int = 768, num_hidden_layers: int = 12, num_attention_heads: int = 12,
-#                  intermediate_size: int = 3072, hidden_act: str = "gelu", hidden_dropout_prob: float = 0.0,
-#                  attention_probs_dropout_prob: float = 0.0, initializer_range: float = 0.02,
-#                  layer_norm_eps: float = 1e-12, image_size: int = 224, patch_size: int = 16, 
-#                  num_channels: int = 3, qkv_bias: bool = True, encoder_stride:int = 16):
+class FocalNetEncoder(pl.LightningModule):
+    def __init__(self, hidden_dropout_prob: float = 0.0, initializer_range: float = 0.02,
+                 image_size: int = 224, patch_size: int = 16, num_channels: int = 3,
+                 embed_dim:int = 96, hidden_sizes:list = [192, 384, 768, 768], 
+                 depths:list = [2, 2, 6, 2], focal_levels:list = [2, 2, 2, 2],
+                 focal_windows:list = [3, 3, 3, 3], mlp_ratio:float = 4.0,
+                 drop_path_rate:float = 0.1, layer_norm_eps:float = 1e-5):
                 
-#                 self.image_size = image_size
-#                 self.patch_size = patch_size
-#                 self.num_channels = num_channels
-#                 self.embed_dim = 
-#                 use_conv_embed: True
-#                 hidden_sizes: [192, 384, 768, 768]
-#                 depths: [2, 2, 6, 2]
-#                 focal_levels: [2, 2, 2, 2]
-#                 focal_windows: [3, 3, 3, 3]
-#                 hidden_act: "gelu"
-#                 mlp_ratio: 4.0
-#                 hidden_dropout_prob: 0.2
-#                 drop_path_rate: 0.1
-#                 use_layerscale: 1e-4
-#                 use_post_layernorm: False
-#                 use_post_layernorm_in_modulation: False
-#                 normalize_modulator: False
-#                 initializer_range: 2e-2
-#                 layer_norm_eps: 1e-5
-#                 encoder_stride: 32
-#                 out_features: null
+        self.config = FocalNetConfig(
+                            image_size = image_size,
+                            patch_size = patch_size,
+                            num_channels = num_channels,
+                            embed_dim = embed_dim,
+                            use_conv_embed = True,
+                            hidden_sizes = hidden_sizes,
+                            depths = depths,
+                            focal_levels = focal_levels,
+                            focal_windows = focal_windows,
+                            hidden_act = "gelu",
+                            mlp_ratio = mlp_ratio,
+                            hidden_dropout_prob = hidden_dropout_prob,
+                            drop_path_rate = drop_path_rate,
+                            use_layerscale = False,
+                            use_post_layernorm = False,
+                            use_post_layernorm_in_modulation = False,
+                            normalize_modulator = False,
+                            initializer_range =  initializer_range,
+                            layer_norm_eps = layer_norm_eps,
+                            encoder_stride = 32,
+                        )
+        self.model = FocalNetModel(self.config, add_pooling_layer= False)
+
+    def forward(self, x):
+        return self.model(x, return_dict = True).last_hidden_state
+                

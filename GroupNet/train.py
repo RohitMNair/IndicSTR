@@ -2,7 +2,7 @@ import torch
 import hydra
 from torchvision import transforms
 from utils.transforms import RescaleTransform, PadTransform
-from lightning.pytorch.callbacks import StochasticWeightAveraging
+from lightning.pytorch.callbacks import StochasticWeightAveraging, LearningRateMonitor
 from omegaconf import DictConfig
 from hydra.utils import instantiate
 
@@ -39,9 +39,10 @@ def main(cfg: DictConfig):
 
     swa = StochasticWeightAveraging(swa_lrs=1e-2)
 
+    lr_monitor = LearningRateMonitor(logging_interval='step', log_momentum = True)
     trainer = instantiate(
                     cfg.training, 
-                    callbacks = [checkpoint_callback, swa],
+                    callbacks = [checkpoint_callback, swa, lr_monitor],
                     logger = [csv_logger, tensorboard_logger]
                 )
     

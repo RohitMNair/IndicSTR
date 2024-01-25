@@ -58,11 +58,14 @@ class HindiLMDBDataset(Dataset):
                 label = ''.join(label.split()) # remove any white-spaces
                 # normalize unicode to remove redundant representations
                 label = unicodedata.normalize('NFKD', label)
-                # save the label and corresponding index
+                if index % 100000 == 0:
+                    print(f"Processed {index} number of labels", flush = True)
+
                 if len(self.tokenizer.hindi_label_transform(label)) == 0:
                     continue
-                self.items.append(label)
-                self.processed_indexes.append(index)
+                else:
+                    self.items.append(label)
+                    self.processed_indexes.append(index)
         print("Length of labels ", len(self.items))
         return len(self.items)
 

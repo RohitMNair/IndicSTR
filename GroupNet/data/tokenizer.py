@@ -10,6 +10,7 @@ class Tokenizer:
     Class for encoding and decoding labels
     """
     BLANK = "[B]"
+    EOS = "[E]"
 
     def __init__(self, half_character_classes:list, full_character_classes:list, diacritic_classes:list,
                 halfer:str, threshold:float= 0.5, max_grps:int= 25):
@@ -21,9 +22,11 @@ class Tokenizer:
         - halfer (str): diacritic used to represent a half-character
         - threshold (float): classification threshold (default: 0.5)
         """
-        self.h_c_classes = [Tokenizer.BLANK] + half_character_classes
-        self.f_c_classes = [Tokenizer.BLANK] + full_character_classes
-        self.d_classes = diacritic_classes      
+        self.h_c_classes = [Tokenizer.EOS, Tokenizer.BLANK] + half_character_classes
+        self.f_c_classes = [Tokenizer.EOS, Tokenizer.BLANK] + full_character_classes
+        self.d_classes = [Tokenizer.EOS] + diacritic_classes       
+        self.pad_id = 1
+        self.eos_id = 0
         self._normalize_charset()
         self.h_c_set = set(self.h_c_classes)
         self.f_c_set = set(self.f_c_classes)
@@ -141,6 +144,7 @@ class Tokenizer:
         running_grp = ""
         idx = 0
         while(idx < len(label)):
+            t = idx
             # the group starts with a half-char or a full-char
             if self._check_h_c(label, idx):
                 # checks for half-characters
@@ -166,6 +170,10 @@ class Tokenizer:
                 if self._check_d_c(label, idx):
                     running_grp += (label[idx])
                     idx += 1
+
+            if t == idx:
+                print(f"Invalid label {label}-{t}")
+                return ()
                 
             grps = grps + (running_grp, )
             running_grp = ""
@@ -185,12 +193,20 @@ class Tokenizer:
                                                 and diacritics (one hot encoded)
         """
         # get the character groupings
-        h_c_2_target, h_c_1_target, f_c_target, d_target = 0, 0, 0, torch.tensor([0. for i in range(len(self.d_classes))])
+        h_c_2_target, h_c_1_target, f_c_target, d_target = (
+                                                            self.pad_id,
+                                                            self.pad_id,
+                                                            self.pad_id,
+                                                            torch.tensor(
+                                                                [0 for i in range(len(self.d_classes))],
+                                                                  dtype= torch.float32
+                                                                )
+                                                            )
         for i, char in enumerate(grp):
             halfer_cntr = 0
             if char in self.h_c_set and i + 1 < len(grp) and grp[i+1] == self.halfer:
                     # for half character occurence
-                    if h_c_1_target == 0:
+                    if h_c_1_target == self.pad_id:
                         # half_character1 will always track the half-character
                         # which is joined with the complete character
                         h_c_1_target = self.rev_h_c_label_map[char]
@@ -202,13 +218,13 @@ class Tokenizer:
                         h_c_1_target = self.rev_h_c_label_map[char]
 
             elif char in self.f_c_set:
-                assert f_c_target == 0,\
+                assert f_c_target == self.pad_id,\
                        f"2 full Characters have occured {grp}-{char}"
                 f_c_target = self.rev_f_c_label_map[char]
 
             elif char in self.d_c_set:
                 # for diacritic occurence
-                assert d_target[self.rev_d_label_map[char]] == 0.0, \
+                assert d_target[self.rev_d_label_map[char]] == 0, \
                     f"2 same matras occured {grp}-{char}-{d_target}"
                 
                 d_target[self.rev_d_label_map[char]] = 1.
@@ -221,12 +237,12 @@ class Tokenizer:
 
             else:
                 raise Exception(f"Character {char} not found in vocabulary")
-        
+
         assert torch.sum(d_target, dim = -1) <= 2, f"More than 2 diacritics occured {grp}-{d_target}"
 
         return h_c_2_target, h_c_1_target, f_c_target, d_target
 
-    def label_encoder(self, label:str, device:torch.device)-> Tuple[Tensor, Tensor, Tensor, Tensor]:
+    def label_encoder(self, label:str, device:torch.device)-> Tuple[Tensor, Tensor, Tensor, Tensor, int]:
         """
         Converts the text label into classes indexes for classification
         Args:
@@ -245,13 +261,21 @@ class Tokenizer:
                                                             torch.zeros(self.max_grps, len(self.d_classes), dtype= torch.long)
                                                         )
         # truncate grps if grps exceed max_grps
-        if len(grps) > self.max_grps:
+        if len(grps) <= self.max_grps:
+            eos_idx = len(grps)
+            h_c_2_target[eos_idx], h_c_1_target[eos_idx], f_c_target[eos_idx], d_target[eos_idx] = (
+                                                                                            self.eos_id, 
+                                                                                            self.eos_id, 
+                                                                                            self.eos_id, 
+                                                                                            torch.full((len(self.d_classes),), self.eos_id),
+                                                                                        )
+        else:
             grps = grps[:self.max_grps]
-
+       
         for idx,grp in enumerate(grps, start= 0):
             h_c_2_target[idx], h_c_1_target[idx], f_c_target[idx], d_target[idx] = self.grp_class_encoder(grp=grp)
 
-        return h_c_2_target.to(device), h_c_1_target.to(device), f_c_target.to(device), d_target.to(device)
+        return h_c_2_target.to(device), h_c_1_target.to(device), f_c_target.to(device), d_target.to(device), len(grps)
     
     def _decode_grp(self, h_c_2_pred:Tensor,h_c_1_pred:Tensor, f_c_pred:Tensor, 
                     d_pred:Tensor, d_max:Tensor)-> str:
@@ -276,7 +300,10 @@ class Tokenizer:
               + self.d_c_label_map[int(d_pred[0].item())] if d_max[0] else "" \
               + self.d_c_label_map[int(d_pred[1].item())] if d_max[1] else ""
         
-        return grp.replace("[B]", "") # remove all [B] occurences
+        if Tokenizer.EOS in grp:
+            return Tokenizer.EOS
+        
+        return grp.replace(Tokenizer.BLANK, "") # remove all [B] occurences
                 
     def decode(self, logits:Tuple[Tensor, Tensor, Tensor, Tensor])-> tuple:
         """
@@ -306,13 +333,18 @@ class Tokenizer:
         for i in range(batch_size):
             label = ""
             for j in range(self.max_grps):
-                label += self._decode_grp(
+                grp = self._decode_grp(
                                 h_c_2_pred= h_c_2_preds[i,j],
                                 h_c_1_pred= h_c_1_preds[i,j],
                                 f_c_pred= f_c_preds[i,j],
                                 d_pred= d_preds[i,j],
                                 d_max= d_max[i,j]
                             )
+                if Tokenizer.EOS in grp:
+                    break
+                else:
+                    label += grp
+                    
             pred_labels.append(label)
             label = ""
         
