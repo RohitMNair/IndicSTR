@@ -11,6 +11,7 @@ class Tokenizer:
     """
     BLANK = "[B]"
     EOS = "[E]"
+    PAD = "[P]"
 
     def __init__(self, half_character_classes:list, full_character_classes:list, diacritic_classes:list,
                 halfer:str, threshold:float= 0.5, max_grps:int= 25):
@@ -22,11 +23,12 @@ class Tokenizer:
         - halfer (str): diacritic used to represent a half-character
         - threshold (float): classification threshold (default: 0.5)
         """
-        self.h_c_classes = [Tokenizer.EOS, Tokenizer.BLANK] + half_character_classes
-        self.f_c_classes = [Tokenizer.EOS, Tokenizer.BLANK] + full_character_classes
-        self.d_classes = [Tokenizer.EOS] + diacritic_classes       
+        self.h_c_classes = [Tokenizer.EOS, Tokenizer.PAD, Tokenizer.BLANK] + half_character_classes
+        self.f_c_classes = [Tokenizer.EOS, Tokenizer.PAD, Tokenizer.BLANK] + full_character_classes
+        self.d_classes = [Tokenizer.EOS, Tokenizer.PAD] + diacritic_classes       
         self.pad_id = 1
         self.eos_id = 0
+        self.blank_id = 2
         self._normalize_charset()
         self.h_c_set = set(self.h_c_classes)
         self.f_c_set = set(self.f_c_classes)
@@ -194,19 +196,19 @@ class Tokenizer:
         """
         # get the character groupings
         h_c_2_target, h_c_1_target, f_c_target, d_target = (
-                                                            self.pad_id,
-                                                            self.pad_id,
-                                                            self.pad_id,
+                                                            self.blank_id,
+                                                            self.blank_id,
+                                                            self.blank_id,
                                                             torch.tensor(
                                                                 [0 for i in range(len(self.d_classes))],
-                                                                  dtype= torch.float32
+                                                                  dtype= torch.long
                                                                 )
                                                             )
         for i, char in enumerate(grp):
             halfer_cntr = 0
             if char in self.h_c_set and i + 1 < len(grp) and grp[i+1] == self.halfer:
                     # for half character occurence
-                    if h_c_1_target == self.pad_id:
+                    if h_c_1_target == self.blank_id:
                         # half_character1 will always track the half-character
                         # which is joined with the complete character
                         h_c_1_target = self.rev_h_c_label_map[char]
@@ -218,7 +220,7 @@ class Tokenizer:
                         h_c_1_target = self.rev_h_c_label_map[char]
 
             elif char in self.f_c_set:
-                assert f_c_target == self.pad_id,\
+                assert f_c_target == self.blank_id,\
                        f"2 full Characters have occured {grp}-{char}"
                 f_c_target = self.rev_f_c_label_map[char]
 
@@ -255,20 +257,19 @@ class Tokenizer:
         """
         grps = self.hindi_label_transform(label= label)
         h_c_2_target, h_c_1_target, f_c_target, d_target = (
-                                                            torch.zeros(self.max_grps, dtype= torch.long), 
-                                                            torch.zeros(self.max_grps, dtype= torch.long),
-                                                            torch.zeros(self.max_grps, dtype= torch.long),
+                                                            torch.full((self.max_grps,), self.pad_id, dtype= torch.long), 
+                                                            torch.full((self.max_grps,), self.pad_id, dtype= torch.long),
+                                                            torch.full((self.max_grps,), self.pad_id, dtype= torch.long),
                                                             torch.zeros(self.max_grps, len(self.d_classes), dtype= torch.long)
                                                         )
+        d_target[:,self.pad_id] = 1.
         # truncate grps if grps exceed max_grps
-        if len(grps) <= self.max_grps:
+        if len(grps) < self.max_grps:
             eos_idx = len(grps)
-            h_c_2_target[eos_idx], h_c_1_target[eos_idx], f_c_target[eos_idx], d_target[eos_idx] = (
-                                                                                            self.eos_id, 
-                                                                                            self.eos_id, 
-                                                                                            self.eos_id, 
-                                                                                            torch.full((len(self.d_classes),), self.eos_id),
-                                                                                        )
+            # assign eos after the last group
+            h_c_2_target[eos_idx], h_c_1_target[eos_idx], f_c_target[eos_idx] = self.eos_id, self.eos_id, self.eos_id
+            d_target[eos_idx, self.eos_id] = 1
+                                                                                        
         else:
             grps = grps[:self.max_grps]
        
@@ -303,7 +304,7 @@ class Tokenizer:
         if Tokenizer.EOS in grp:
             return Tokenizer.EOS
         
-        return grp.replace(Tokenizer.BLANK, "") # remove all [B] occurences
+        return grp.replace(Tokenizer.BLANK, "").replace(Tokenizer.PAD, "") # remove all [B] occurences
                 
     def decode(self, logits:Tuple[Tensor, Tensor, Tensor, Tensor])-> tuple:
         """

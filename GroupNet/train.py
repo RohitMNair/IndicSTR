@@ -46,7 +46,7 @@ def main(cfg: DictConfig):
                     logger = [csv_logger, tensorboard_logger]
                 )
     
-    model = instantiate(cfg.GrpNet)
+    model = instantiate(cfg.model)
     trainer.fit(model, datamodule, ckpt_path = cfg.ckpt_path)
     
 if __name__ == "__main__":

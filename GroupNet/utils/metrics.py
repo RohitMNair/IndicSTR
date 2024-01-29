@@ -260,10 +260,9 @@ class FullCharacterAccuracy(Metric):
     def compute(self):
         return self.correct.float() / self.total
 
-
-class WRR(Metric):
+class ComprihensiveWRR(Metric):
     """
-    Measures Word Recognition Rate(WRR)
+    Measures Word Recognition Rate(WRR) by matching all the groups (including pad)
     Args:
      threshold (float): float value between 0 and 1, will behave as threshold for
                         classification.
@@ -331,3 +330,18 @@ class WRR(Metric):
 
     def compute(self):
         return self.correct.float() / self.total    
+
+class WRR(Metric):
+    """
+    Measures Word Recognition Rate(WRR), by comparing decoded label
+    Args:
+     threshold (float): float value between 0 and 1, will behave as threshold for
+                        classification.
+    """
+    def __init__(self, threshold:float= 0.5):
+        super().__init__()
+        self.add_state("correct", default=torch.tensor(0), dist_reduce_fx="sum")
+        self.add_state("total", default=torch.tensor(0), dist_reduce_fx="sum")
+        self.thresh = threshold
+        self.sigmoid = nn.Sigmoid()
+        self.softmax = nn.Softmax(dim= 2)

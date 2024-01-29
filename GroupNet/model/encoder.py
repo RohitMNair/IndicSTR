@@ -76,7 +76,7 @@ class FocalNetEncoder(pl.LightningModule):
                  depths:list = [2, 2, 6, 2], focal_levels:list = [2, 2, 2, 2],
                  focal_windows:list = [3, 3, 3, 3], mlp_ratio:float = 4.0,
                  drop_path_rate:float = 0.1, layer_norm_eps:float = 1e-5):
-                
+        super().__init__()
         self.config = FocalNetConfig(
                             image_size = image_size,
                             patch_size = patch_size,
