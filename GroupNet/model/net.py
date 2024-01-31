@@ -1,7 +1,7 @@
 from .encoder import ViTEncoder, FocalNetEncoder
 from .decoder import GroupDecoder
 from utils.metrics import (DiacriticAccuracy, FullCharacterAccuracy, CharGrpAccuracy,
-                   HalfCharacterAccuracy, CombinedHalfCharAccuracy, WRR)
+                   HalfCharacterAccuracy, CombinedHalfCharAccuracy, WRR, ComprihensiveWRR)
 from torch.optim import AdamW, Adam
 from torch.optim.lr_scheduler import OneCycleLR
 from typing import Tuple, Optional
@@ -155,7 +155,7 @@ class GroupNet(pl.LightningModule):
         self.train_f_c_acc = FullCharacterAccuracy(threshold = self.threshold)
         self.train_d_acc = DiacriticAccuracy(threshold = self.threshold)
         self.train_grp_acc = CharGrpAccuracy(threshold= self.threshold)
-        self.train_wrr = WRR(threshold= self.threshold)
+        self.train_wrr = ComprihensiveWRR(threshold= self.threshold)
         # Validation Metrics
         self.val_h_c_1_acc = HalfCharacterAccuracy(threshold = self.threshold)
         self.val_h_c_2_acc = HalfCharacterAccuracy(threshold = self.threshold)
@@ -163,7 +163,7 @@ class GroupNet(pl.LightningModule):
         self.val_f_c_acc = FullCharacterAccuracy(threshold = self.threshold)
         self.val_d_acc = DiacriticAccuracy(threshold = self.threshold)
         self.val_grp_acc = CharGrpAccuracy(threshold= self.threshold)
-        self.val_wrr = WRR(threshold= self.threshold)
+        self.val_wrr = ComprihensiveWRR(threshold= self.threshold)
         # Testing Metrics
         self.test_h_c_1_acc = HalfCharacterAccuracy(threshold = self.threshold)
         self.test_h_c_2_acc = HalfCharacterAccuracy(threshold = self.threshold)
@@ -171,7 +171,7 @@ class GroupNet(pl.LightningModule):
         self.test_f_c_acc = FullCharacterAccuracy(threshold = self.threshold)
         self.test_d_acc = DiacriticAccuracy(threshold = self.threshold)
         self.test_grp_acc = CharGrpAccuracy(threshold= self.threshold)
-        self.test_wrr = WRR(threshold= self.threshold)
+        self.test_wrr = ComprihensiveWRR(threshold= self.threshold)
     
     def _extract_char_embeddings(self)-> Tuple[Tensor, Tensor, Tensor, Tensor, int]:
         """
@@ -547,7 +547,8 @@ class ViTSTR(pl.LightningModule):
         self.train_f_c_acc = FullCharacterAccuracy(threshold = self.threshold)
         self.train_d_acc = DiacriticAccuracy(threshold = self.threshold)
         self.train_grp_acc = CharGrpAccuracy(threshold= self.threshold)
-        self.train_wrr = WRR(threshold= self.threshold)
+        # self.train_wrr = ComprihensiveWRR(threshold= self.threshold)
+        self.train_wrr = WRR()
         # Validation Metrics
         self.val_h_c_1_acc = HalfCharacterAccuracy(threshold = self.threshold)
         self.val_h_c_2_acc = HalfCharacterAccuracy(threshold = self.threshold)
@@ -555,7 +556,8 @@ class ViTSTR(pl.LightningModule):
         self.val_f_c_acc = FullCharacterAccuracy(threshold = self.threshold)
         self.val_d_acc = DiacriticAccuracy(threshold = self.threshold)
         self.val_grp_acc = CharGrpAccuracy(threshold= self.threshold)
-        self.val_wrr = WRR(threshold= self.threshold)
+        # self.val_wrr = ComprihensiveWRR(threshold= self.threshold)
+        self.val_wrr = WRR()
         # Testing Metrics
         self.test_h_c_1_acc = HalfCharacterAccuracy(threshold = self.threshold)
         self.test_h_c_2_acc = HalfCharacterAccuracy(threshold = self.threshold)
@@ -563,14 +565,15 @@ class ViTSTR(pl.LightningModule):
         self.test_f_c_acc = FullCharacterAccuracy(threshold = self.threshold)
         self.test_d_acc = DiacriticAccuracy(threshold = self.threshold)
         self.test_grp_acc = CharGrpAccuracy(threshold= self.threshold)
-        self.test_wrr = WRR(threshold= self.threshold)
+        # self.test_wrr = ComprihensiveWRR(threshold= self.threshold)
+        self.test_wrr = WRR()
 
     def forward(self, x:torch.Tensor)-> Tuple[Tensor, Tensor, Tensor, Tensor]:
         enc_x = self.encoder(x)
         h_c_2_logits, h_c_1_logits, f_c_logits, d_logits = self.classifier(enc_x)
         return (h_c_2_logits, h_c_1_logits, f_c_logits, d_logits)
     
-    def _log_tb_images(self, batch_no:int, viz_batch:Tensor, pred_labels:tuple, gt_labels:Optional[tuple], mode:str= "test") -> None:
+    def _log_tb_images(self, viz_batch:Tensor, pred_labels:tuple, gt_labels:tuple, mode:str= "test") -> None:
         """
         Function to display a batch and its predictions to tensorboard
         Args:
@@ -591,17 +594,11 @@ class ViTSTR(pl.LightningModule):
         if tb_logger is None:
                 raise ValueError('TensorBoard Logger not found')
 
-        if mode == "train" or mode == "val":
-            assert gt_labels is not None, "gt_labels cannot be none in training or val mode"
-            assert pred_labels is not None, "pred_labels must be provided in training or val mode"
-            # Log the images (Give them different names)
-            for img_idx in range(viz_batch.shape[0]):
-                tb_logger.add_image(f"{mode}/{batch_no}_pred-{pred_labels[img_idx]}_gt-{gt_labels[img_idx]}", viz_batch[img_idx], self.global_step)
-        
-        else:
-            assert pred_labels is not None, "pred_labels must be provided in training mode"
-            for img_idx in range(viz_batch.shape[0]):
-                tb_logger.add_image(f"{mode}/{batch_no}_pred-{pred_labels[img_idx]}_{img_idx}", viz_batch[img_idx], 0)
+        assert gt_labels is not None, "gt_labels cannot be none"
+        assert pred_labels is not None, "pred_labels cannot be none"
+        # Log the images (Give them different names)
+        for img_idx in range(viz_batch.shape[0]):
+            tb_logger.add_image(f"{mode}/{self.global_step}_pred-{pred_labels[img_idx]}_gt-{gt_labels[img_idx]}", viz_batch[img_idx], 0)
     
     def configure_optimizers(self)-> dict:
         optmizer = AdamW(params= self.parameters(), lr= self.lr, weight_decay= self.weight_decay)
@@ -619,6 +616,50 @@ class ViTSTR(pl.LightningModule):
                 'interval': 'step',
             }
         }
+
+    def _get_flattened_non_pad(self, targets: Tuple[Tensor, Tensor, Tensor, Tensor],
+                                logits: Tuple[Tensor, Tensor, Tensor, Tensor]):
+        """
+        Function which returns a flattened version of the targets and logits, it flattens the group dimension
+        Args:
+        - targets (tuple(Tensor, Tensor, Tensor, Tensor)): A tuple consisting of half-char 2, half-char 1, full char, & diacritic targets
+        - logits (tuple(Tensor, Tensor, Tensor, Tensor)): A tuple consisting of half-char 2, half-char 1, full char, & diacritic logits
+
+        Returns:
+        - tuple(tuple(Tensor, Tensor, Tensor, Tensor), 
+            tuple(Tensor, Tensor, Tensor, Tensor)): (half-char 2, half-char 1, full char, & diacritic targets), 
+                                                    (half-char 2, half-char 1, full char, & diacritic logits)
+        """
+        h_c_2_targets, h_c_1_targets, f_c_targets, d_targets = targets
+        h_c_2_logits, h_c_1_logits, f_c_logits, d_logits = logits
+
+        flat_h_c_2_targets = h_c_2_targets.reshape(-1)
+        flat_h_c_1_targets = h_c_1_targets.reshape(-1)
+        flat_f_c_targets = f_c_targets.reshape(-1)
+        flat_d_targets = d_targets.reshape(-1, self.num_d_classes)
+        # print(f"The Flattened Targets {flat_h_c_2_targets}\n{flat_h_c_1_targets}\n{flat_f_c_targets}\n{flat_d_targets}\n\n")
+
+        flat_h_c_2_non_pad = (flat_h_c_2_targets != self.tokenizer.pad_id)
+        flat_h_c_1_non_pad = (flat_h_c_1_targets != self.tokenizer.pad_id)
+        flat_f_c_non_pad = (flat_f_c_targets != self.tokenizer.pad_id)
+        d_pad = torch.zeros(self.num_d_classes, dtype = torch.float32, device= self.device)
+        d_pad[self.tokenizer.pad_id] = 1.
+        flat_d_non_pad = ~ torch.all(flat_d_targets == d_pad, dim= 1)
+        assert torch.all((flat_h_c_2_non_pad == flat_h_c_1_non_pad) == (flat_f_c_non_pad == flat_d_non_pad)).item(), \
+                "Pads are not aligned properly"
+
+        flat_h_c_2_targets = flat_h_c_2_targets[flat_h_c_2_non_pad]
+        flat_h_c_1_targets = flat_h_c_1_targets[flat_h_c_2_non_pad]
+        flat_f_c_targets = flat_f_c_targets[flat_h_c_2_non_pad]
+        flat_d_targets = flat_d_targets[flat_h_c_2_non_pad]
+
+        flat_h_c_2_logits = h_c_2_logits.reshape(-1, self.num_h_c_classes)[flat_h_c_2_non_pad]
+        flat_h_c_1_logits = h_c_1_logits.reshape(-1, self.num_h_c_classes)[flat_h_c_2_non_pad]
+        flat_f_c_logits = f_c_logits.reshape(-1, self.num_f_c_classes)[flat_h_c_2_non_pad]
+        flat_d_logits = d_logits.reshape(-1, self.num_d_classes)[flat_h_c_2_non_pad]
+
+        return ((flat_h_c_2_targets, flat_h_c_1_targets, flat_f_c_targets, flat_d_targets), 
+                (flat_h_c_2_logits, flat_h_c_1_logits, flat_f_c_logits, flat_d_logits))
     
     def training_step(self, batch, batch_no)-> Tensor:
         # batch: img Tensor(BS x C x H x W), label tuple(BS)
@@ -638,32 +679,12 @@ class ViTSTR(pl.LightningModule):
 
         (h_c_2_logits, h_c_1_logits, f_c_logits, d_logits) = self.forward(imgs)
 
-        # get a flattened copy for grp level metrics
-        flat_h_c_2_targets = h_c_2_targets.reshape(batch_size * self.max_grps)
-        flat_h_c_1_targets = h_c_1_targets.reshape(batch_size * self.max_grps)
-        flat_f_c_targets = f_c_targets.reshape(batch_size * self.max_grps)
-        flat_d_targets = d_targets.reshape(batch_size * self.max_grps, self.num_d_classes)
-        # print(f"The Flattened Targets {flat_h_c_2_targets}\n{flat_h_c_1_targets}\n{flat_f_c_targets}\n{flat_d_targets}\n\n")
-
-        flat_h_c_2_non_pad = (flat_h_c_2_targets != self.tokenizer.pad_id)
-        flat_h_c_1_non_pad = (flat_h_c_1_targets != self.tokenizer.pad_id)
-        flat_f_c_non_pad = (flat_f_c_targets != self.tokenizer.pad_id)
-        d_pad = torch.zeros(self.num_d_classes, dtype = torch.float32, device= self.device)
-        d_pad[self.tokenizer.pad_id] = 1.
-        flat_d_non_pad = ~ torch.all(flat_d_targets == d_pad, dim= 1)
-        assert torch.all((flat_h_c_2_non_pad == flat_h_c_1_non_pad) == (flat_f_c_non_pad == flat_d_non_pad)).item(), "Pads are not aligned properly"
-
-        flat_h_c_2_targets = flat_h_c_2_targets[flat_h_c_2_non_pad]
-        flat_h_c_1_targets = flat_h_c_1_targets[flat_h_c_2_non_pad]
-        flat_f_c_targets = flat_f_c_targets[flat_h_c_2_non_pad]
-        flat_d_targets = flat_d_targets[flat_h_c_2_non_pad]
-
-        flat_h_c_2_logits = h_c_2_logits.reshape(-1, self.num_h_c_classes)[flat_h_c_2_non_pad]
-        flat_h_c_1_logits = h_c_1_logits.reshape(-1, self.num_h_c_classes)[flat_h_c_2_non_pad]
-        flat_f_c_logits = f_c_logits.reshape(-1, self.num_f_c_classes)[flat_h_c_2_non_pad]
-        flat_d_logits = d_logits.reshape(-1, self.num_d_classes)[flat_h_c_2_non_pad]
-        # print(f"The Flattened Logits {flat_h_c_2_logits}\n{flat_h_c_1_logits}\n{flat_f_c_logits}\n{flat_d_logits}\n\n")
-        
+        # Get the flattened versions of the targets and the logits for grp level metrics
+        ((flat_h_c_2_targets, flat_h_c_1_targets, flat_f_c_targets, flat_d_targets), 
+        (flat_h_c_2_logits, flat_h_c_1_logits, flat_f_c_logits, flat_d_logits)) = self._get_flattened_non_pad(
+                                                                                targets= (h_c_2_targets, h_c_1_targets, f_c_targets, d_targets),
+                                                                                logits= (h_c_2_logits, h_c_1_logits, f_c_logits, d_logits),
+                                                                            )
         # compute the loss for each group
         loss = self.h_c_2_loss(input= flat_h_c_2_logits, target= flat_h_c_2_targets) \
             + self.h_c_1_loss(input= flat_h_c_1_logits, target= flat_h_c_1_targets) \
@@ -680,12 +701,13 @@ class ViTSTR(pl.LightningModule):
         self.train_grp_acc((flat_h_c_2_logits, flat_h_c_1_logits, flat_f_c_logits, flat_d_logits),\
                            (flat_h_c_2_targets, flat_h_c_1_targets, flat_f_c_targets, flat_d_targets))
         # Word level metric
-        self.train_wrr((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits),\
-                       (h_c_2_targets, h_c_1_targets, f_c_targets, d_targets))
+        # self.train_wrr((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits),\
+        #                (h_c_2_targets, h_c_1_targets, f_c_targets, d_targets))
+        self.train_wrr(pred_strs= self.tokenizer.decode((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits)), target_strs= labels)
 
-        if batch_no % 100000 == 0:
+        if batch_no % 1000000 == 0:
             pred_labels = self.tokenizer.decode((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits))            
-            self._log_tb_images(batch_no, imgs[:5], pred_labels= pred_labels[:5], gt_labels= labels[:5], mode= "train")
+            self._log_tb_images(imgs[:5], pred_labels= pred_labels[:5], gt_labels= labels[:5], mode= "train")
         # On step logs for proggress bar display
         log_dict_step = {
             "train_loss_step": loss,
@@ -725,40 +747,19 @@ class ViTSTR(pl.LightningModule):
 
         (h_c_2_logits, h_c_1_logits, f_c_logits, d_logits) = self.forward(imgs)
 
-        # get a flattened copy for grp level metrics
-        flat_h_c_2_targets = h_c_2_targets.reshape(batch_size * self.max_grps)
-        flat_h_c_1_targets = h_c_1_targets.reshape(batch_size * self.max_grps)
-        flat_f_c_targets = f_c_targets.reshape(batch_size * self.max_grps)
-        flat_d_targets = d_targets.reshape(batch_size * self.max_grps, self.num_d_classes)
-
-        flat_h_c_2_logits = h_c_2_logits.reshape(-1, self.num_h_c_classes)
-        flat_h_c_1_logits = h_c_1_logits.reshape(-1, self.num_h_c_classes)
-        flat_f_c_logits = f_c_logits.reshape(-1, self.num_f_c_classes)
-        flat_d_logits = d_logits.reshape(-1, self.num_d_classes)
-
-        flat_h_c_2_non_pad = (flat_h_c_2_targets != self.tokenizer.pad_id)
-        flat_h_c_1_non_pad = (flat_h_c_1_targets != self.tokenizer.pad_id)
-        flat_f_c_non_pad = (flat_f_c_targets != self.tokenizer.pad_id)
-        d_pad = torch.zeros(self.num_d_classes, dtype = torch.float32, device= self.device)
-        d_pad[self.tokenizer.pad_id] = 1.
-        flat_d_non_pad = ~ torch.all(flat_d_targets == d_pad, dim= 1)
-        assert torch.all((flat_h_c_2_non_pad == flat_h_c_1_non_pad) == (flat_f_c_non_pad == flat_d_non_pad)).item(), "Pads are not aligned properly"
-
-        flat_h_c_2_targets = flat_h_c_2_targets[flat_h_c_2_non_pad]
-        flat_h_c_1_targets = flat_h_c_1_targets[flat_h_c_2_non_pad]
-        flat_f_c_targets = flat_f_c_targets[flat_h_c_2_non_pad]
-        flat_d_targets = flat_d_targets[flat_h_c_2_non_pad]
-
-        flat_h_c_2_logits = h_c_2_logits.reshape(-1, self.num_h_c_classes)[flat_h_c_2_non_pad]
-        flat_h_c_1_logits = h_c_1_logits.reshape(-1, self.num_h_c_classes)[flat_h_c_2_non_pad]
-        flat_f_c_logits = f_c_logits.reshape(-1, self.num_f_c_classes)[flat_h_c_2_non_pad]
-        flat_d_logits = d_logits.reshape(-1, self.num_d_classes)[flat_h_c_2_non_pad]
+        # Get the flattened versions of the targets and the logits for grp level metrics
+        ((flat_h_c_2_targets, flat_h_c_1_targets, flat_f_c_targets, flat_d_targets), 
+        (flat_h_c_2_logits, flat_h_c_1_logits, flat_f_c_logits, flat_d_logits)) = self._get_flattened_non_pad(
+                                                                                targets= (h_c_2_targets, h_c_1_targets, f_c_targets, d_targets),
+                                                                                logits= (h_c_2_logits, h_c_1_logits, f_c_logits, d_logits),
+                                                                            )
 
         # compute the loss for each group
         loss = self.h_c_2_loss(input= flat_h_c_2_logits, target= flat_h_c_2_targets) \
             + self.h_c_1_loss(input= flat_h_c_1_logits, target= flat_h_c_1_targets) \
             + self.f_c_loss(input= flat_f_c_logits, target= flat_f_c_targets) \
             + self.d_loss(input= flat_d_logits, target= flat_d_targets)
+        
         # Grp level metrics
         self.val_h_c_2_acc(flat_h_c_2_logits, flat_h_c_2_targets)
         self.val_h_c_1_acc(flat_h_c_1_logits, flat_h_c_1_targets)
@@ -769,12 +770,14 @@ class ViTSTR(pl.LightningModule):
         self.val_grp_acc((flat_h_c_2_logits, flat_h_c_1_logits, flat_f_c_logits, flat_d_logits),\
                            (flat_h_c_2_targets, flat_h_c_1_targets, flat_f_c_targets, flat_d_targets))
         # Word level metric
-        self.val_wrr((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits),\
-                     (h_c_2_targets, h_c_1_targets, f_c_targets, d_targets))
+        # self.val_wrr((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits),\
+        #              (h_c_2_targets, h_c_1_targets, f_c_targets, d_targets))
+        self.val_wrr(pred_strs= self.tokenizer.decode((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits)), target_strs= labels)
         
-        if batch_no % 50000 == 0:
+        if batch_no % 100000 == 0:
             pred_labels = self.tokenizer.decode((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits))            
-            self._log_tb_images(batch_no, imgs[:5], pred_labels= pred_labels[:5], gt_labels= labels[:5], mode= "val")
+            self._log_tb_images(imgs[:5], pred_labels= pred_labels[:5], gt_labels= labels[:5], mode= "val")
+
         # On epoch only logs
         log_dict_epoch = {
             "val_loss_epoch": loss,
@@ -804,40 +807,19 @@ class ViTSTR(pl.LightningModule):
 
         (h_c_2_logits, h_c_1_logits, f_c_logits, d_logits) = self.forward(imgs)
 
-        # get a flattened copy for grp level metrics
-        flat_h_c_2_targets = h_c_2_targets.reshape(batch_size * self.max_grps)
-        flat_h_c_1_targets = h_c_1_targets.reshape(batch_size * self.max_grps)
-        flat_f_c_targets = f_c_targets.reshape(batch_size * self.max_grps)
-        flat_d_targets = d_targets.reshape(batch_size * self.max_grps, self.num_d_classes)
+        # Get the flattened versions of the targets and the logits for grp level metrics
+        ((flat_h_c_2_targets, flat_h_c_1_targets, flat_f_c_targets, flat_d_targets), 
+        (flat_h_c_2_logits, flat_h_c_1_logits, flat_f_c_logits, flat_d_logits)) = self._get_flattened_non_pad(
+                                                                            targets= (h_c_2_targets, h_c_1_targets, f_c_targets, d_targets),
+                                                                            logits= (h_c_2_logits, h_c_1_logits, f_c_logits, d_logits),
+                                                                            )
 
-        flat_h_c_2_logits = h_c_2_logits.reshape(-1, self.num_h_c_classes)
-        flat_h_c_1_logits = h_c_1_logits.reshape(-1, self.num_h_c_classes)
-        flat_f_c_logits = f_c_logits.reshape(-1, self.num_f_c_classes)
-        flat_d_logits = d_logits.reshape(-1, self.num_d_classes)
-
-        flat_h_c_2_non_pad = (flat_h_c_2_targets != self.tokenizer.pad_id)
-        flat_h_c_1_non_pad = (flat_h_c_1_targets != self.tokenizer.pad_id)
-        flat_f_c_non_pad = (flat_f_c_targets != self.tokenizer.pad_id)
-        d_pad = torch.zeros(self.num_d_classes, dtype = torch.float32, device= self.device)
-        d_pad[self.tokenizer.pad_id] = 1.
-        flat_d_non_pad = ~ torch.all(flat_d_targets == d_pad, dim= 1)
-        assert torch.all((flat_h_c_2_non_pad == flat_h_c_1_non_pad) == (flat_f_c_non_pad == flat_d_non_pad)).item(), "Pads are not aligned properly"
-
-        flat_h_c_2_targets = flat_h_c_2_targets[flat_h_c_2_non_pad]
-        flat_h_c_1_targets = flat_h_c_1_targets[flat_h_c_2_non_pad]
-        flat_f_c_targets = flat_f_c_targets[flat_h_c_2_non_pad]
-        flat_d_targets = flat_d_targets[flat_h_c_2_non_pad]
-
-        flat_h_c_2_logits = h_c_2_logits.reshape(-1, self.num_h_c_classes)[flat_h_c_2_non_pad]
-        flat_h_c_1_logits = h_c_1_logits.reshape(-1, self.num_h_c_classes)[flat_h_c_2_non_pad]
-        flat_f_c_logits = f_c_logits.reshape(-1, self.num_f_c_classes)[flat_h_c_2_non_pad]
-        flat_d_logits = d_logits.reshape(-1, self.num_d_classes)[flat_h_c_2_non_pad]
-        
         # compute the loss for each group
         loss = self.h_c_2_loss(input= flat_h_c_2_logits, target= flat_h_c_2_targets) \
             + self.h_c_1_loss(input= flat_h_c_1_logits, target= flat_h_c_1_targets) \
             + self.f_c_loss(input= flat_f_c_logits, target= flat_f_c_targets) \
             + self.d_loss(input= flat_d_logits, target= flat_d_targets)
+        
         # Grp level metrics
         self.test_h_c_2_acc(flat_h_c_2_logits, flat_h_c_2_targets)
         self.test_h_c_1_acc(flat_h_c_1_logits, flat_h_c_1_targets)
@@ -849,12 +831,12 @@ class ViTSTR(pl.LightningModule):
                            (flat_h_c_2_targets, flat_h_c_1_targets, flat_f_c_targets, flat_d_targets))
         
         # Word level metric
-        self.test_wrr((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits),\
-                      (h_c_2_targets, h_c_1_targets, f_c_targets, d_targets))
+        # self.test_wrr((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits),\
+        #               (h_c_2_targets, h_c_1_targets, f_c_targets, d_targets))
+        self.test_wrr(pred_strs= self.tokenizer.decode((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits)), target_strs= labels)
         
-        if batch_no % 100000:
-            pred_labels = self.tokenizer.decode((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits))            
-            self._log_tb_images(batch_no, imgs, pred_labels= pred_labels, gt_labels= None, mode= "test")
+        pred_labels = self.tokenizer.decode((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits))            
+        self._log_tb_images(imgs, pred_labels= pred_labels, gt_labels= labels, mode= "test")
             
         # On epoch only logs
         log_dict_epoch = {
@@ -868,6 +850,11 @@ class ViTSTR(pl.LightningModule):
             "test_grp_acc_epoch": self.test_grp_acc,
         }
         self.log_dict(log_dict_epoch, on_step = False, on_epoch = True, prog_bar = False, logger = True, sync_dist = True)
+
+    def predict_step(self, batch):
+        (h_c_2_logits, h_c_1_logits, f_c_logits, d_logits) = self.forward(batch)
+        pred_labels = self.tokenizer.decode((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits))
+        return pred_labels, (h_c_2_logits, h_c_1_logits, f_c_logits, d_logits)
 
 class FocalSTR(pl.LightningModule):
     """
@@ -955,7 +942,8 @@ class FocalSTR(pl.LightningModule):
         self.train_f_c_acc = FullCharacterAccuracy(threshold = self.threshold)
         self.train_d_acc = DiacriticAccuracy(threshold = self.threshold)
         self.train_grp_acc = CharGrpAccuracy(threshold= self.threshold)
-        self.train_wrr = WRR(threshold= self.threshold)
+        # self.train_wrr = ComprihensiveWRR(threshold= self.threshold)
+        self.train_wrr = WRR()
         # Validation Metrics
         self.val_h_c_1_acc = HalfCharacterAccuracy(threshold = self.threshold)
         self.val_h_c_2_acc = HalfCharacterAccuracy(threshold = self.threshold)
@@ -963,7 +951,8 @@ class FocalSTR(pl.LightningModule):
         self.val_f_c_acc = FullCharacterAccuracy(threshold = self.threshold)
         self.val_d_acc = DiacriticAccuracy(threshold = self.threshold)
         self.val_grp_acc = CharGrpAccuracy(threshold= self.threshold)
-        self.val_wrr = WRR(threshold= self.threshold)
+        # self.val_wrr = ComprihensiveWRR(threshold= self.threshold)
+        self.val_wrr = WRR()
         # Testing Metrics
         self.test_h_c_1_acc = HalfCharacterAccuracy(threshold = self.threshold)
         self.test_h_c_2_acc = HalfCharacterAccuracy(threshold = self.threshold)
@@ -971,14 +960,15 @@ class FocalSTR(pl.LightningModule):
         self.test_f_c_acc = FullCharacterAccuracy(threshold = self.threshold)
         self.test_d_acc = DiacriticAccuracy(threshold = self.threshold)
         self.test_grp_acc = CharGrpAccuracy(threshold= self.threshold)
-        self.test_wrr = WRR(threshold= self.threshold)
+        # self.test_wrr = ComprihensiveWRR(threshold= self.threshold)
+        self.test_wrr = WRR()
 
     def forward(self, x:torch.Tensor)-> Tuple[Tensor, Tensor, Tensor, Tensor]:
         enc_x = self.encoder(x)
         h_c_2_logits, h_c_1_logits, f_c_logits, d_logits = self.classifier(enc_x)
         return (h_c_2_logits, h_c_1_logits, f_c_logits, d_logits)
     
-    def _log_tb_images(self, batch_no:int, viz_batch:Tensor, pred_labels:tuple, gt_labels:Optional[tuple], mode:str= "test") -> None:
+    def _log_tb_images(self, viz_batch:Tensor, pred_labels:tuple, gt_labels:tuple, mode:str= "test") -> None:
         """
         Function to display a batch and its predictions to tensorboard
         Args:
@@ -999,17 +989,11 @@ class FocalSTR(pl.LightningModule):
         if tb_logger is None:
                 raise ValueError('TensorBoard Logger not found')
 
-        if mode == "train" or mode == "val":
-            assert gt_labels is not None, "gt_labels cannot be none in training or val mode"
-            assert pred_labels is not None, "pred_labels must be provided in training or val mode"
-            # Log the images (Give them different names)
-            for img_idx in range(viz_batch.shape[0]):
-                tb_logger.add_image(f"{mode}/{batch_no}_pred-{pred_labels[img_idx]}_gt-{gt_labels[img_idx]}", viz_batch[img_idx], self.global_step)
-        
-        else:
-            assert pred_labels is not None, "pred_labels must be provided in training mode"
-            for img_idx in range(viz_batch.shape[0]):
-                tb_logger.add_image(f"{mode}/{batch_no}_pred-{pred_labels[img_idx]}_{img_idx}", viz_batch[img_idx], 0)
+        assert gt_labels is not None, "gt_labels cannot be none"
+        assert pred_labels is not None, "pred_labels cannot be none"
+        # Log the images (Give them different names)
+        for img_idx in range(viz_batch.shape[0]):
+            tb_logger.add_image(f"{mode}/{self.global_step}_pred-{pred_labels[img_idx]}_gt-{gt_labels[img_idx]}", viz_batch[img_idx], 0)
     
     def configure_optimizers(self)-> dict:
         optmizer = AdamW(params= self.parameters(), lr= self.lr, weight_decay= self.weight_decay)
@@ -1027,6 +1011,50 @@ class FocalSTR(pl.LightningModule):
                 'interval': 'step',
             }
         }
+
+    def _get_flattened_non_pad(self, targets: Tuple[Tensor, Tensor, Tensor, Tensor],
+                                logits: Tuple[Tensor, Tensor, Tensor, Tensor]):
+        """
+        Function which returns a flattened version of the targets and logits, it flattens the group dimension
+        Args:
+        - targets (tuple(Tensor, Tensor, Tensor, Tensor)): A tuple consisting of half-char 2, half-char 1, full char, & diacritic targets
+        - logits (tuple(Tensor, Tensor, Tensor, Tensor)): A tuple consisting of half-char 2, half-char 1, full char, & diacritic logits
+
+        Returns:
+        - tuple(tuple(Tensor, Tensor, Tensor, Tensor), 
+            tuple(Tensor, Tensor, Tensor, Tensor)): (half-char 2, half-char 1, full char, & diacritic targets), 
+                                                    (half-char 2, half-char 1, full char, & diacritic logits)
+        """
+        h_c_2_targets, h_c_1_targets, f_c_targets, d_targets = targets
+        h_c_2_logits, h_c_1_logits, f_c_logits, d_logits = logits
+
+        flat_h_c_2_targets = h_c_2_targets.reshape(-1)
+        flat_h_c_1_targets = h_c_1_targets.reshape(-1)
+        flat_f_c_targets = f_c_targets.reshape(-1)
+        flat_d_targets = d_targets.reshape(-1, self.num_d_classes)
+        # print(f"The Flattened Targets {flat_h_c_2_targets}\n{flat_h_c_1_targets}\n{flat_f_c_targets}\n{flat_d_targets}\n\n")
+
+        flat_h_c_2_non_pad = (flat_h_c_2_targets != self.tokenizer.pad_id)
+        flat_h_c_1_non_pad = (flat_h_c_1_targets != self.tokenizer.pad_id)
+        flat_f_c_non_pad = (flat_f_c_targets != self.tokenizer.pad_id)
+        d_pad = torch.zeros(self.num_d_classes, dtype = torch.float32, device= self.device)
+        d_pad[self.tokenizer.pad_id] = 1.
+        flat_d_non_pad = ~ torch.all(flat_d_targets == d_pad, dim= 1)
+        assert torch.all((flat_h_c_2_non_pad == flat_h_c_1_non_pad) == (flat_f_c_non_pad == flat_d_non_pad)).item(), \
+                "Pads are not aligned properly"
+
+        flat_h_c_2_targets = flat_h_c_2_targets[flat_h_c_2_non_pad]
+        flat_h_c_1_targets = flat_h_c_1_targets[flat_h_c_2_non_pad]
+        flat_f_c_targets = flat_f_c_targets[flat_h_c_2_non_pad]
+        flat_d_targets = flat_d_targets[flat_h_c_2_non_pad]
+
+        flat_h_c_2_logits = h_c_2_logits.reshape(-1, self.num_h_c_classes)[flat_h_c_2_non_pad]
+        flat_h_c_1_logits = h_c_1_logits.reshape(-1, self.num_h_c_classes)[flat_h_c_2_non_pad]
+        flat_f_c_logits = f_c_logits.reshape(-1, self.num_f_c_classes)[flat_h_c_2_non_pad]
+        flat_d_logits = d_logits.reshape(-1, self.num_d_classes)[flat_h_c_2_non_pad]
+
+        return ((flat_h_c_2_targets, flat_h_c_1_targets, flat_f_c_targets, flat_d_targets), 
+                (flat_h_c_2_logits, flat_h_c_1_logits, flat_f_c_logits, flat_d_logits))
     
     def training_step(self, batch, batch_no)-> Tensor:
         # batch: img Tensor(BS x C x H x W), label tuple(BS)
@@ -1046,32 +1074,12 @@ class FocalSTR(pl.LightningModule):
 
         (h_c_2_logits, h_c_1_logits, f_c_logits, d_logits) = self.forward(imgs)
 
-        # get a flattened copy for grp level metrics
-        flat_h_c_2_targets = h_c_2_targets.reshape(batch_size * self.max_grps)
-        flat_h_c_1_targets = h_c_1_targets.reshape(batch_size * self.max_grps)
-        flat_f_c_targets = f_c_targets.reshape(batch_size * self.max_grps)
-        flat_d_targets = d_targets.reshape(batch_size * self.max_grps, self.num_d_classes)
-        # print(f"The Flattened Targets {flat_h_c_2_targets}\n{flat_h_c_1_targets}\n{flat_f_c_targets}\n{flat_d_targets}\n\n")
-
-        flat_h_c_2_non_pad = (flat_h_c_2_targets != self.tokenizer.pad_id)
-        flat_h_c_1_non_pad = (flat_h_c_1_targets != self.tokenizer.pad_id)
-        flat_f_c_non_pad = (flat_f_c_targets != self.tokenizer.pad_id)
-        d_pad = torch.zeros(self.num_d_classes, dtype = torch.float32, device= self.device)
-        d_pad[self.tokenizer.pad_id] = 1.
-        flat_d_non_pad = ~ torch.all(flat_d_targets == d_pad, dim= 1)
-        assert torch.all((flat_h_c_2_non_pad == flat_h_c_1_non_pad) == (flat_f_c_non_pad == flat_d_non_pad)).item(), "Pads are not aligned properly"
-
-        flat_h_c_2_targets = flat_h_c_2_targets[flat_h_c_2_non_pad]
-        flat_h_c_1_targets = flat_h_c_1_targets[flat_h_c_2_non_pad]
-        flat_f_c_targets = flat_f_c_targets[flat_h_c_2_non_pad]
-        flat_d_targets = flat_d_targets[flat_h_c_2_non_pad]
-
-        flat_h_c_2_logits = h_c_2_logits.reshape(-1, self.num_h_c_classes)[flat_h_c_2_non_pad]
-        flat_h_c_1_logits = h_c_1_logits.reshape(-1, self.num_h_c_classes)[flat_h_c_2_non_pad]
-        flat_f_c_logits = f_c_logits.reshape(-1, self.num_f_c_classes)[flat_h_c_2_non_pad]
-        flat_d_logits = d_logits.reshape(-1, self.num_d_classes)[flat_h_c_2_non_pad]
-        # print(f"The Flattened Logits {flat_h_c_2_logits}\n{flat_h_c_1_logits}\n{flat_f_c_logits}\n{flat_d_logits}\n\n")
-        
+        # Get the flattened versions of the targets and the logits for grp level metrics
+        ((flat_h_c_2_targets, flat_h_c_1_targets, flat_f_c_targets, flat_d_targets), 
+        (flat_h_c_2_logits, flat_h_c_1_logits, flat_f_c_logits, flat_d_logits)) = self._get_flattened_non_pad(
+                                                                                targets= (h_c_2_targets, h_c_1_targets, f_c_targets, d_targets),
+                                                                                logits= (h_c_2_logits, h_c_1_logits, f_c_logits, d_logits),
+                                                                            )
         # compute the loss for each group
         loss = self.h_c_2_loss(input= flat_h_c_2_logits, target= flat_h_c_2_targets) \
             + self.h_c_1_loss(input= flat_h_c_1_logits, target= flat_h_c_1_targets) \
@@ -1088,12 +1096,13 @@ class FocalSTR(pl.LightningModule):
         self.train_grp_acc((flat_h_c_2_logits, flat_h_c_1_logits, flat_f_c_logits, flat_d_logits),\
                            (flat_h_c_2_targets, flat_h_c_1_targets, flat_f_c_targets, flat_d_targets))
         # Word level metric
-        self.train_wrr((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits),\
-                       (h_c_2_targets, h_c_1_targets, f_c_targets, d_targets))
+        # self.train_wrr((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits),\
+        #                (h_c_2_targets, h_c_1_targets, f_c_targets, d_targets))
+        self.train_wrr(pred_strs= self.tokenizer.decode((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits)), target_strs= labels)
 
-        if batch_no % 100000 == 0:
+        if batch_no % 1000000 == 0:
             pred_labels = self.tokenizer.decode((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits))            
-            self._log_tb_images(batch_no, imgs[:5], pred_labels= pred_labels[:5], gt_labels= labels[:5], mode= "train")
+            self._log_tb_images(imgs[:5], pred_labels= pred_labels[:5], gt_labels= labels[:5], mode= "train")
         # On step logs for proggress bar display
         log_dict_step = {
             "train_loss_step": loss,
@@ -1133,34 +1142,12 @@ class FocalSTR(pl.LightningModule):
 
         (h_c_2_logits, h_c_1_logits, f_c_logits, d_logits) = self.forward(imgs)
 
-        # get a flattened copy for grp level metrics
-        flat_h_c_2_targets = h_c_2_targets.reshape(batch_size * self.max_grps)
-        flat_h_c_1_targets = h_c_1_targets.reshape(batch_size * self.max_grps)
-        flat_f_c_targets = f_c_targets.reshape(batch_size * self.max_grps)
-        flat_d_targets = d_targets.reshape(batch_size * self.max_grps, self.num_d_classes)
-
-        flat_h_c_2_logits = h_c_2_logits.reshape(-1, self.num_h_c_classes)
-        flat_h_c_1_logits = h_c_1_logits.reshape(-1, self.num_h_c_classes)
-        flat_f_c_logits = f_c_logits.reshape(-1, self.num_f_c_classes)
-        flat_d_logits = d_logits.reshape(-1, self.num_d_classes)
-
-        flat_h_c_2_non_pad = (flat_h_c_2_targets != self.tokenizer.pad_id)
-        flat_h_c_1_non_pad = (flat_h_c_1_targets != self.tokenizer.pad_id)
-        flat_f_c_non_pad = (flat_f_c_targets != self.tokenizer.pad_id)
-        d_pad = torch.zeros(self.num_d_classes, dtype = torch.float32, device= self.device)
-        d_pad[self.tokenizer.pad_id] = 1.
-        flat_d_non_pad = ~ torch.all(flat_d_targets == d_pad, dim= 1)
-        assert torch.all((flat_h_c_2_non_pad == flat_h_c_1_non_pad) == (flat_f_c_non_pad == flat_d_non_pad)).item(), "Pads are not aligned properly"
-
-        flat_h_c_2_targets = flat_h_c_2_targets[flat_h_c_2_non_pad]
-        flat_h_c_1_targets = flat_h_c_1_targets[flat_h_c_2_non_pad]
-        flat_f_c_targets = flat_f_c_targets[flat_h_c_2_non_pad]
-        flat_d_targets = flat_d_targets[flat_h_c_2_non_pad]
-
-        flat_h_c_2_logits = h_c_2_logits.reshape(-1, self.num_h_c_classes)[flat_h_c_2_non_pad]
-        flat_h_c_1_logits = h_c_1_logits.reshape(-1, self.num_h_c_classes)[flat_h_c_2_non_pad]
-        flat_f_c_logits = f_c_logits.reshape(-1, self.num_f_c_classes)[flat_h_c_2_non_pad]
-        flat_d_logits = d_logits.reshape(-1, self.num_d_classes)[flat_h_c_2_non_pad]
+        # Get the flattened versions of the targets and the logits for grp level metrics
+        ((flat_h_c_2_targets, flat_h_c_1_targets, flat_f_c_targets, flat_d_targets), 
+        (flat_h_c_2_logits, flat_h_c_1_logits, flat_f_c_logits, flat_d_logits)) = self._get_flattened_non_pad(
+                                                                                targets= (h_c_2_targets, h_c_1_targets, f_c_targets, d_targets),
+                                                                                logits= (h_c_2_logits, h_c_1_logits, f_c_logits, d_logits),
+                                                                            )
 
         # compute the loss for each group
         loss = self.h_c_2_loss(input= flat_h_c_2_logits, target= flat_h_c_2_targets) \
@@ -1178,12 +1165,14 @@ class FocalSTR(pl.LightningModule):
         self.val_grp_acc((flat_h_c_2_logits, flat_h_c_1_logits, flat_f_c_logits, flat_d_logits),\
                            (flat_h_c_2_targets, flat_h_c_1_targets, flat_f_c_targets, flat_d_targets))
         # Word level metric
-        self.val_wrr((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits),\
-                     (h_c_2_targets, h_c_1_targets, f_c_targets, d_targets))
+        # self.val_wrr((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits),\
+        #              (h_c_2_targets, h_c_1_targets, f_c_targets, d_targets))
+        self.val_wrr(pred_strs= self.tokenizer.decode((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits)), target_strs= labels)
         
-        if batch_no % 50000 == 0:
+        if batch_no % 100000 == 0:
             pred_labels = self.tokenizer.decode((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits))            
-            self._log_tb_images(batch_no, imgs[:5], pred_labels= pred_labels[:5], gt_labels= labels[:5], mode= "val")
+            self._log_tb_images(imgs[:5], pred_labels= pred_labels[:5], gt_labels= labels[:5], mode= "val")
+
         # On epoch only logs
         log_dict_epoch = {
             "val_loss_epoch": loss,
@@ -1213,40 +1202,19 @@ class FocalSTR(pl.LightningModule):
 
         (h_c_2_logits, h_c_1_logits, f_c_logits, d_logits) = self.forward(imgs)
 
-        # get a flattened copy for grp level metrics
-        flat_h_c_2_targets = h_c_2_targets.reshape(batch_size * self.max_grps)
-        flat_h_c_1_targets = h_c_1_targets.reshape(batch_size * self.max_grps)
-        flat_f_c_targets = f_c_targets.reshape(batch_size * self.max_grps)
-        flat_d_targets = d_targets.reshape(batch_size * self.max_grps, self.num_d_classes)
-
-        flat_h_c_2_logits = h_c_2_logits.reshape(-1, self.num_h_c_classes)
-        flat_h_c_1_logits = h_c_1_logits.reshape(-1, self.num_h_c_classes)
-        flat_f_c_logits = f_c_logits.reshape(-1, self.num_f_c_classes)
-        flat_d_logits = d_logits.reshape(-1, self.num_d_classes)
-
-        flat_h_c_2_non_pad = (flat_h_c_2_targets != self.tokenizer.pad_id)
-        flat_h_c_1_non_pad = (flat_h_c_1_targets != self.tokenizer.pad_id)
-        flat_f_c_non_pad = (flat_f_c_targets != self.tokenizer.pad_id)
-        d_pad = torch.zeros(self.num_d_classes, dtype = torch.float32, device= self.device)
-        d_pad[self.tokenizer.pad_id] = 1.
-        flat_d_non_pad = ~ torch.all(flat_d_targets == d_pad, dim= 1)
-        assert torch.all((flat_h_c_2_non_pad == flat_h_c_1_non_pad) == (flat_f_c_non_pad == flat_d_non_pad)).item(), "Pads are not aligned properly"
-
-        flat_h_c_2_targets = flat_h_c_2_targets[flat_h_c_2_non_pad]
-        flat_h_c_1_targets = flat_h_c_1_targets[flat_h_c_2_non_pad]
-        flat_f_c_targets = flat_f_c_targets[flat_h_c_2_non_pad]
-        flat_d_targets = flat_d_targets[flat_h_c_2_non_pad]
-
-        flat_h_c_2_logits = h_c_2_logits.reshape(-1, self.num_h_c_classes)[flat_h_c_2_non_pad]
-        flat_h_c_1_logits = h_c_1_logits.reshape(-1, self.num_h_c_classes)[flat_h_c_2_non_pad]
-        flat_f_c_logits = f_c_logits.reshape(-1, self.num_f_c_classes)[flat_h_c_2_non_pad]
-        flat_d_logits = d_logits.reshape(-1, self.num_d_classes)[flat_h_c_2_non_pad]
+        # Get the flattened versions of the targets and the logits for grp level metrics
+        ((flat_h_c_2_targets, flat_h_c_1_targets, flat_f_c_targets, flat_d_targets), 
+        (flat_h_c_2_logits, flat_h_c_1_logits, flat_f_c_logits, flat_d_logits)) = self._get_flattened_non_pad(
+                                                                            targets= (h_c_2_targets, h_c_1_targets, f_c_targets, d_targets),
+                                                                            logits= (h_c_2_logits, h_c_1_logits, f_c_logits, d_logits),
+                                                                            )
 
         # compute the loss for each group
         loss = self.h_c_2_loss(input= flat_h_c_2_logits, target= flat_h_c_2_targets) \
             + self.h_c_1_loss(input= flat_h_c_1_logits, target= flat_h_c_1_targets) \
             + self.f_c_loss(input= flat_f_c_logits, target= flat_f_c_targets) \
             + self.d_loss(input= flat_d_logits, target= flat_d_targets)
+        
         # Grp level metrics
         self.test_h_c_2_acc(flat_h_c_2_logits, flat_h_c_2_targets)
         self.test_h_c_1_acc(flat_h_c_1_logits, flat_h_c_1_targets)
@@ -1258,12 +1226,12 @@ class FocalSTR(pl.LightningModule):
                            (flat_h_c_2_targets, flat_h_c_1_targets, flat_f_c_targets, flat_d_targets))
         
         # Word level metric
-        self.test_wrr((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits),\
-                      (h_c_2_targets, h_c_1_targets, f_c_targets, d_targets))
+        # self.test_wrr((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits),\
+        #               (h_c_2_targets, h_c_1_targets, f_c_targets, d_targets))
+        self.test_wrr(pred_strs= self.tokenizer.decode((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits)), target_strs= labels)
         
-        if batch_no % 100000:
-            pred_labels = self.tokenizer.decode((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits))            
-            self._log_tb_images(batch_no, imgs, pred_labels= pred_labels, gt_labels= None, mode= "test")
+        pred_labels = self.tokenizer.decode((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits))            
+        self._log_tb_images(imgs, pred_labels= pred_labels, gt_labels= labels, mode= "test")
             
         # On epoch only logs
         log_dict_epoch = {
@@ -1277,3 +1245,9 @@ class FocalSTR(pl.LightningModule):
             "test_grp_acc_epoch": self.test_grp_acc,
         }
         self.log_dict(log_dict_epoch, on_step = False, on_epoch = True, prog_bar = False, logger = True, sync_dist = True)
+
+    def predict_step(self, batch):
+        (h_c_2_logits, h_c_1_logits, f_c_logits, d_logits) = self.forward(batch)
+        pred_labels = self.tokenizer.decode((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits))
+        return pred_labels, (h_c_2_logits, h_c_1_logits, f_c_logits, d_logits)
+

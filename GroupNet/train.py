@@ -48,6 +48,9 @@ def main(cfg: DictConfig):
     
     model = instantiate(cfg.model)
     trainer.fit(model, datamodule, ckpt_path = cfg.ckpt_path)
+
+    if cfg.datamodule.test_dir is not None:
+        trainer.test(datamodule = datamodule)
     
 if __name__ == "__main__":
     main()

@@ -27,7 +27,7 @@ diacritic_classes: ['ा','ि','ी','ु','ू','ृ', 'े','ै', 'ो', '�
 halfer: '्'
 
 defaults: 
-  - model: ViTSTR
+  - model: FocalSTR
   - _self_
 
 model:
@@ -43,8 +43,8 @@ transforms:
 datamodule:
   _target_: data.module.LMDBHindiDataModule
   train_dir: /home/rohitn/D1/HindiGlyphSynth/hindi_synth_lmdb
-  val_dir: /home/rohitn/D1/HindiGlyphSynth/hindi_real
-  test_dir: null
+  val_dir: /home/rohitn/D1/HindiGlyphSynth/hindi_synth_val_lmdb
+  test_dir: /home/rohitn/D1/HindiGlyphSynth/hindi_real
   batch_size: 64 
   num_workers: 8
   drop_last: false

@@ -46,7 +46,7 @@ class LMDBHindiDataModule(pl.LightningDataModule):
                                 halfer= self.halfer,
                             )
         self.val_dataset = HindiLMDBDataset(
-                                data_dir= self.train_dir,
+                                data_dir= self.val_dir,
                                 transforms= self.transforms,
                                 half_character_classes= self.half_character_classes,
                                 full_character_classes= self.full_character_classes,
@@ -55,7 +55,7 @@ class LMDBHindiDataModule(pl.LightningDataModule):
                             )
         if self.test_dir is not None:
             self.test_dataset = HindiLMDBDataset(
-                                data_dir= self.train_dir,
+                                data_dir= self.test_dir,
                                 transforms= self.transforms,
                                 half_character_classes= self.half_character_classes,
                                 full_character_classes= self.full_character_classes,

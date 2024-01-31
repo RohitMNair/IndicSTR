@@ -24,7 +24,7 @@ class Tokenizer:
         - threshold (float): classification threshold (default: 0.5)
         """
         self.h_c_classes = [Tokenizer.EOS, Tokenizer.PAD, Tokenizer.BLANK] + half_character_classes
-        self.f_c_classes = [Tokenizer.EOS, Tokenizer.PAD, Tokenizer.BLANK] + full_character_classes
+        self.f_c_classes = [Tokenizer.EOS, Tokenizer.PAD] + full_character_classes
         self.d_classes = [Tokenizer.EOS, Tokenizer.PAD] + diacritic_classes       
         self.pad_id = 1
         self.eos_id = 0
@@ -198,7 +198,7 @@ class Tokenizer:
         h_c_2_target, h_c_1_target, f_c_target, d_target = (
                                                             self.blank_id,
                                                             self.blank_id,
-                                                            self.blank_id,
+                                                            self.pad_id,
                                                             torch.tensor(
                                                                 [0 for i in range(len(self.d_classes))],
                                                                   dtype= torch.long
@@ -297,14 +297,15 @@ class Tokenizer:
             "Diacritic preds and max must contain 2 elements for 2 diacritics"
         
         grp = ""
-        grp += self.h_c_label_map[int(h_c_2_pred.item())] + self.h_c_label_map[int(h_c_1_pred.item())] + self.f_c_label_map[int(f_c_pred.item())] \
-              + self.d_c_label_map[int(d_pred[0].item())] if d_max[0] else "" \
-              + self.d_c_label_map[int(d_pred[1].item())] if d_max[1] else ""
-        
-        if Tokenizer.EOS in grp:
-            return Tokenizer.EOS
-        
-        return grp.replace(Tokenizer.BLANK, "").replace(Tokenizer.PAD, "") # remove all [B] occurences
+        grp += self.h_c_label_map[int(h_c_2_pred.item())] + self.halfer if self.h_c_label_map[int(h_c_2_pred.item())] != Tokenizer.BLANK \
+            and self.h_c_label_map[int(h_c_2_pred.item())] != Tokenizer.PAD else ""
+        grp += self.h_c_label_map[int(h_c_1_pred.item())] + self.halfer if self.h_c_label_map[int(h_c_1_pred.item())] != Tokenizer.BLANK \
+            and self.h_c_label_map[int(h_c_1_pred.item())] != Tokenizer.PAD else ""
+        grp += self.f_c_label_map[int(f_c_pred.item())]
+        grp += self.d_c_label_map[int(d_pred[0].item())] if d_max[0] else ""
+        grp += self.d_c_label_map[int(d_pred[1].item())] if d_max[1] else ""
+                
+        return grp.replace(Tokenizer.BLANK, "").replace(Tokenizer.PAD, "") # remove all [B], [P] occurences
                 
     def decode(self, logits:Tuple[Tensor, Tensor, Tensor, Tensor])-> tuple:
         """
@@ -327,7 +328,7 @@ class Tokenizer:
 
         # threshold filter for diacritic
         d_bin_mask = nn.functional.sigmoid(d_logits) > self.thresh
-        d_max, d_preds = torch.topk(d_bin_mask.int(), k= 2, dim= 2) # top k requires scalar
+        d_max, d_preds = torch.topk(d_bin_mask.int(), k= 2, dim= 2, largest= True) # top k requires scalar
 
         # get the predictions
         pred_labels = []    

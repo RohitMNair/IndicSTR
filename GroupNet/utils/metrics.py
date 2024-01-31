@@ -338,10 +338,18 @@ class WRR(Metric):
      threshold (float): float value between 0 and 1, will behave as threshold for
                         classification.
     """
-    def __init__(self, threshold:float= 0.5):
+    def __init__(self):
         super().__init__()
         self.add_state("correct", default=torch.tensor(0), dist_reduce_fx="sum")
         self.add_state("total", default=torch.tensor(0), dist_reduce_fx="sum")
-        self.thresh = threshold
-        self.sigmoid = nn.Sigmoid()
-        self.softmax = nn.Softmax(dim= 2)
+
+    def update(self, pred_strs:tuple, target_strs: tuple):
+        for pred_str, tar_str in zip(pred_strs, target_strs):
+            if pred_str == tar_str:
+                self.correct += torch.tensor(1)
+
+        self.total += torch.tensor(len(target_strs))
+    
+    def compute(self):
+        return self.correct / self.total
+            
