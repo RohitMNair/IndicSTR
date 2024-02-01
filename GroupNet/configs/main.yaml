@@ -27,7 +27,7 @@ diacritic_classes: ['ा','ि','ी','ु','ू','ृ', 'े','ै', 'ो', '�
 halfer: '्'
 
 defaults: 
-  - model: FocalSTR
+  - model: ViTSTR
   - _self_
 
 model:
@@ -81,7 +81,7 @@ training:
   strategy: ddp # only use when gpu is available
   devices: 2
   max_epochs: 10
-  # max_steps: 10
+  # max_steps: 1000
   check_val_every_n_epoch: 1
   gradient_clip_val: 10
   precision: 32-true

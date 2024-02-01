@@ -1073,13 +1073,14 @@ class FocalSTR(pl.LightningModule):
             # print(f"The label:{label}; The Targets: {h_c_2_targets[idx]}\n{h_c_1_targets[idx]}\n{f_c_targets[idx]}\n{d_targets[idx]}\n{n_grps[idx]}\n\n")
 
         (h_c_2_logits, h_c_1_logits, f_c_logits, d_logits) = self.forward(imgs)
-
+        
         # Get the flattened versions of the targets and the logits for grp level metrics
         ((flat_h_c_2_targets, flat_h_c_1_targets, flat_f_c_targets, flat_d_targets), 
         (flat_h_c_2_logits, flat_h_c_1_logits, flat_f_c_logits, flat_d_logits)) = self._get_flattened_non_pad(
                                                                                 targets= (h_c_2_targets, h_c_1_targets, f_c_targets, d_targets),
                                                                                 logits= (h_c_2_logits, h_c_1_logits, f_c_logits, d_logits),
                                                                             )
+
         # compute the loss for each group
         loss = self.h_c_2_loss(input= flat_h_c_2_logits, target= flat_h_c_2_targets) \
             + self.h_c_1_loss(input= flat_h_c_1_logits, target= flat_h_c_1_targets) \

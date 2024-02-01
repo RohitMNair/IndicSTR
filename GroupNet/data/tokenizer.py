@@ -124,13 +124,17 @@ class Tokenizer:
                     if grp[i] not in self.f_c_set or \
                         grp[i] not in self.d_c_set or grp[i] not in self.h_c_set:
                         print(f"Invalid {grp[i]} in group {grp} for label {label}")
-                    elif f_c_count == 1:
+                    if f_c_count == 1:
                         print(f"There are no full character in group {grp} for {label}")
-                    else:
+                    if (h_c_count, f_c_count, d_c_count) == (2, 1, 2):
                         print(f"Invalid number of half {h_c_count}, full {f_c_count} \
                                         or diacritic characters {d_c_count} in {grp} for {label}")
                     return False  
                 i += 1
+    
+            if f_c_count == 1 or (h_c_count, f_c_count, d_c_count) == (2, 1, 2):
+                print(f"There are no full character in group {grp} for {label} OR")
+                return False
 
         return True
 
@@ -220,7 +224,7 @@ class Tokenizer:
                         h_c_1_target = self.rev_h_c_label_map[char]
 
             elif char in self.f_c_set:
-                assert f_c_target == self.blank_id,\
+                assert f_c_target == self.pad_id,\
                        f"2 full Characters have occured {grp}-{char}"
                 f_c_target = self.rev_f_c_label_map[char]
 
@@ -239,7 +243,8 @@ class Tokenizer:
 
             else:
                 raise Exception(f"Character {char} not found in vocabulary")
-
+            
+        assert f_c_target != self.pad_id, f"There is no full character {grp}"
         assert torch.sum(d_target, dim = -1) <= 2, f"More than 2 diacritics occured {grp}-{d_target}"
 
         return h_c_2_target, h_c_1_target, f_c_target, d_target
