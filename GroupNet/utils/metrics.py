@@ -2,6 +2,7 @@ from torchmetrics import Metric
 from torch import nn
 from typing import Tuple
 from torch import Tensor
+from nltk import edit_distance
 import torch
 
 class CharGrpAccuracy(Metric):
@@ -334,16 +335,13 @@ class ComprihensiveWRR(Metric):
 class WRR(Metric):
     """
     Measures Word Recognition Rate(WRR), by comparing decoded label
-    Args:
-     threshold (float): float value between 0 and 1, will behave as threshold for
-                        classification.
     """
     def __init__(self):
         super().__init__()
         self.add_state("correct", default=torch.tensor(0), dist_reduce_fx="sum")
         self.add_state("total", default=torch.tensor(0), dist_reduce_fx="sum")
 
-    def update(self, pred_strs:tuple, target_strs: tuple):
+    def update(self, pred_strs:tuple, target_strs: tuple)-> None:
         for pred_str, tar_str in zip(pred_strs, target_strs):
             if pred_str == tar_str:
                 self.correct += torch.tensor(1)
@@ -352,4 +350,83 @@ class WRR(Metric):
     
     def compute(self):
         return self.correct / self.total
-            
+
+class WRR2(Metric):
+    """
+    WRR but compares each character instead of the decoded word.
+    Checks the recognition greedily i.e without threshold for half and full char.
+    """
+    def __init__(self, threshold:float= 0.5):
+        super().__init__()
+        self.add_state("correct", default=torch.tensor(0), dist_reduce_fx="sum")
+        self.add_state("total", default=torch.tensor(0), dist_reduce_fx="sum")
+        self.thresh = threshold
+        self.sigmoid = nn.Sigmoid()
+        self.softmax = nn.Softmax(dim= 2)
+
+    def update(self, logits:Tuple[Tensor, Tensor, Tensor, Tensor], 
+               targets:Tuple[Tensor, Tensor, Tensor, Tensor], pad_id:int):
+        # shape character logits: BS x Max Grps x # of classes
+        # shape character target: BS x Max Grps
+        # shape diacritic logits: BS x Max Grps x # of classes
+        # shape diacritic target: BS x Max Grps x # of classes
+        h_c_2_logits, h_c_1_logits, f_c_logits, d_logits = logits
+        h_c_2_targets, h_c_1_targets, f_c_targets, d_targets = targets
+
+        # check shapes
+        assert len(h_c_2_logits.shape) == len(h_c_1_logits.shape) == len(f_c_logits.shape) == 3 and \
+              len(h_c_2_targets.shape) == len(h_c_1_targets.shape) == len(f_c_targets.shape) == 2, \
+        "for half and full characters logits shape must be (Batch_Size, Max Groups, # of classes) and target shape \
+        should be (Batch_size, Max Grps) containing the class number"
+
+        assert len(d_logits.shape) == 3 and len(d_targets.shape) == 3, \
+        "For diacritics the logits and target must be of shape (Batch Size, Max Groups, # of classes)"
+
+        # get probab values
+        h_c_2_probabs = self.softmax(h_c_2_logits)
+        h_c_1_probabs = self.softmax(h_c_1_logits)
+        f_c_probabs = self.softmax(f_c_logits)
+        d_probabs = self.sigmoid(d_logits)
+
+        # get the max probab and the corresponding index
+        h_c_2_preds = torch.argmax(h_c_2_probabs, dim= 2)
+        h_c_1_preds = torch.argmax(h_c_1_probabs, dim= 2)
+        f_c_preds = torch.argmax(f_c_probabs, dim= 2)
+
+        batch_size = h_c_2_targets.shape[0]
+        # iterate over each batch element and check all the groups which are not pad
+        for i in range(batch_size):
+            # get the non pad grps for the batch element
+            non_pad_grps = (f_c_targets[i] != pad_id)
+            h_c_2_correct = h_c_2_preds[i,non_pad_grps] == h_c_2_targets[i,non_pad_grps]
+            h_c_1_correct = h_c_1_preds[i,non_pad_grps] == h_c_1_targets[i,non_pad_grps]
+            f_c_correct = f_c_preds[i,non_pad_grps] == f_c_targets[i,non_pad_grps]
+            d_correct = torch.all((d_probabs[i,non_pad_grps] >= 0.5) == (d_targets[i,non_pad_grps] >= 1.), dim= 1)
+
+            combined_correct = torch.all(torch.all(torch.stack((h_c_2_correct, h_c_1_correct, f_c_correct, d_correct), dim= 0), dim= 0), dim= 0)
+            self.correct += torch.tensor(1) if combined_correct else torch.tensor(0)
+
+        self.total += torch.tensor(batch_size)
+    
+    def compute(self):
+        return self.correct / self.total
+
+class NED(Metric):
+    """
+    Computes the Complemented Normalized Edit distance between Predicted and GT
+    given as 100*(1-NED(a,b))
+    NED(a,b) = dist(a,b) / max(len(a), len(b))
+    A higher score indicates a better prediction
+    """
+    def __init__(self):
+        super().__init__()
+        self.add_state("ned", default=torch.tensor(0., dtype= torch.float32), dist_reduce_fx="sum")
+        self.add_state("total", default=torch.tensor(0), dist_reduce_fx="sum")
+
+    def update(self, pred_labels:tuple, target_labels:tuple)-> None:
+        for pred_str, tar_str in zip(pred_labels, target_labels):
+            self.ned += edit_distance(pred_str, tar_str) / max(len(pred_str), len(tar_str))
+        self.total += len(target_labels)
+    
+    def compute(self):
+        return 1 - (self.ned / self.total)

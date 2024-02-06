@@ -29,8 +29,16 @@ def main(cfg: DictConfig):
             std=[0.229, 0.224, 0.225]
         ),
         ])
+    test_composed = transforms.Compose([
+        RescaleTransform(cfg.transforms.img_size),
+        PadTransform(cfg.transforms.img_size),
+        transforms.Normalize(
+            mean=[0.485, 0.456, 0.406],
+            std=[0.229, 0.224, 0.225]
+        ),
+        ])
 
-    datamodule = instantiate(cfg.datamodule, transforms = composed)
+    datamodule = instantiate(cfg.datamodule, transforms = composed, test_transforms = test_composed)
 
     csv_logger = instantiate(cfg.csv_logger)
     tensorboard_logger = instantiate(cfg.tensorboard_logger)

@@ -27,7 +27,7 @@ diacritic_classes: ['ा','ि','ी','ु','ू','ृ', 'े','ै', 'ो', '�
 halfer: '्'
 
 defaults: 
-  - model: ViTSTR
+  - model: FocalSTR
   - _self_
 
 model:

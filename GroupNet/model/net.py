@@ -1,7 +1,7 @@
 from .encoder import ViTEncoder, FocalNetEncoder
 from .decoder import GroupDecoder
-from utils.metrics import (DiacriticAccuracy, FullCharacterAccuracy, CharGrpAccuracy,
-                   HalfCharacterAccuracy, CombinedHalfCharAccuracy, WRR, ComprihensiveWRR)
+from utils.metrics import (DiacriticAccuracy, FullCharacterAccuracy, CharGrpAccuracy, NED,
+                   HalfCharacterAccuracy, CombinedHalfCharAccuracy, WRR, WRR2, ComprihensiveWRR)
 from torch.optim import AdamW, Adam
 from torch.optim.lr_scheduler import OneCycleLR
 from typing import Tuple, Optional
@@ -548,7 +548,7 @@ class ViTSTR(pl.LightningModule):
         self.train_d_acc = DiacriticAccuracy(threshold = self.threshold)
         self.train_grp_acc = CharGrpAccuracy(threshold= self.threshold)
         # self.train_wrr = ComprihensiveWRR(threshold= self.threshold)
-        self.train_wrr = WRR()
+        self.train_wrr2 = WRR2(threshold= self.threshold)
         # Validation Metrics
         self.val_h_c_1_acc = HalfCharacterAccuracy(threshold = self.threshold)
         self.val_h_c_2_acc = HalfCharacterAccuracy(threshold = self.threshold)
@@ -557,7 +557,7 @@ class ViTSTR(pl.LightningModule):
         self.val_d_acc = DiacriticAccuracy(threshold = self.threshold)
         self.val_grp_acc = CharGrpAccuracy(threshold= self.threshold)
         # self.val_wrr = ComprihensiveWRR(threshold= self.threshold)
-        self.val_wrr = WRR()
+        self.val_wrr2 = WRR2(threshold= self.threshold)
         # Testing Metrics
         self.test_h_c_1_acc = HalfCharacterAccuracy(threshold = self.threshold)
         self.test_h_c_2_acc = HalfCharacterAccuracy(threshold = self.threshold)
@@ -567,6 +567,8 @@ class ViTSTR(pl.LightningModule):
         self.test_grp_acc = CharGrpAccuracy(threshold= self.threshold)
         # self.test_wrr = ComprihensiveWRR(threshold= self.threshold)
         self.test_wrr = WRR()
+        self.test_wrr2 = WRR2(threshold= self.threshold)
+        self.ned = NED()
 
     def forward(self, x:torch.Tensor)-> Tuple[Tensor, Tensor, Tensor, Tensor]:
         enc_x = self.encoder(x)
@@ -701,9 +703,9 @@ class ViTSTR(pl.LightningModule):
         self.train_grp_acc((flat_h_c_2_logits, flat_h_c_1_logits, flat_f_c_logits, flat_d_logits),\
                            (flat_h_c_2_targets, flat_h_c_1_targets, flat_f_c_targets, flat_d_targets))
         # Word level metric
-        # self.train_wrr((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits),\
-        #                (h_c_2_targets, h_c_1_targets, f_c_targets, d_targets))
-        self.train_wrr(pred_strs= self.tokenizer.decode((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits)), target_strs= labels)
+        self.train_wrr2((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits),\
+                       (h_c_2_targets, h_c_1_targets, f_c_targets, d_targets), self.tokenizer.pad_id)
+        # self.train_wrr(pred_strs= self.tokenizer.decode((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits)), target_strs= labels)
 
         if batch_no % 1000000 == 0:
             pred_labels = self.tokenizer.decode((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits))            
@@ -724,7 +726,7 @@ class ViTSTR(pl.LightningModule):
             "train_combined_half_character_acc": self.train_comb_h_c_acc,
             "train_character_acc": self.train_f_c_acc,
             "train_diacritic_acc": self.train_d_acc,
-            "train_wrr_epoch": self.train_wrr, 
+            "train_wrr2_epoch": self.train_wrr2, 
             "train_grp_acc_epoch": self.train_grp_acc,
         }
         self.log_dict(log_dict_epoch, on_step = False, on_epoch = True, prog_bar = False, logger = True, sync_dist = True)  
@@ -770,9 +772,9 @@ class ViTSTR(pl.LightningModule):
         self.val_grp_acc((flat_h_c_2_logits, flat_h_c_1_logits, flat_f_c_logits, flat_d_logits),\
                            (flat_h_c_2_targets, flat_h_c_1_targets, flat_f_c_targets, flat_d_targets))
         # Word level metric
-        # self.val_wrr((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits),\
-        #              (h_c_2_targets, h_c_1_targets, f_c_targets, d_targets))
-        self.val_wrr(pred_strs= self.tokenizer.decode((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits)), target_strs= labels)
+        self.val_wrr2((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits),\
+                     (h_c_2_targets, h_c_1_targets, f_c_targets, d_targets), self.tokenizer.pad_id)
+        # self.val_wrr(pred_strs= self.tokenizer.decode((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits)), target_strs= labels)
         
         if batch_no % 100000 == 0:
             pred_labels = self.tokenizer.decode((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits))            
@@ -786,8 +788,8 @@ class ViTSTR(pl.LightningModule):
             "val_combined_half_character_acc": self.val_comb_h_c_acc,
             "val_character_acc": self.val_f_c_acc,
             "val_diacritic_acc": self.val_d_acc,
-            "val_wrr_epoch": self.val_wrr, 
-            "val_grp_acc_epoch": self.val_grp_acc,
+            "val_wrr2": self.val_wrr, 
+            "val_grp_acc": self.val_grp_acc,
         }
         self.log_dict(log_dict_epoch, on_step = False, on_epoch = True, prog_bar = False, logger = True, sync_dist = True)
 
@@ -831,11 +833,11 @@ class ViTSTR(pl.LightningModule):
                            (flat_h_c_2_targets, flat_h_c_1_targets, flat_f_c_targets, flat_d_targets))
         
         # Word level metric
-        # self.test_wrr((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits),\
-        #               (h_c_2_targets, h_c_1_targets, f_c_targets, d_targets))
-        self.test_wrr(pred_strs= self.tokenizer.decode((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits)), target_strs= labels)
-        
-        pred_labels = self.tokenizer.decode((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits))            
+        self.test_wrr2((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits),\
+                      (h_c_2_targets, h_c_1_targets, f_c_targets, d_targets), self.tokenizer.pad_id)
+        pred_labels= self.tokenizer.decode((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits))
+        self.test_wrr(pred_strs= pred_labels, target_strs= labels)        
+        self.ned(pred_labels= pred_labels, target_labels= labels)
         self._log_tb_images(imgs, pred_labels= pred_labels, gt_labels= labels, mode= "test")
             
         # On epoch only logs
@@ -846,8 +848,10 @@ class ViTSTR(pl.LightningModule):
             "test_combined_half_character_acc": self.test_comb_h_c_acc,
             "test_character_acc": self.test_f_c_acc,
             "test_diacritic_acc": self.test_d_acc,
-            "test_wrr_epoch": self.test_wrr, 
-            "test_grp_acc_epoch": self.test_grp_acc,
+            "test_wrr": self.test_wrr, 
+            "test_wrr2": self.test_wrr2,
+            "test_grp_acc": self.test_grp_acc,
+            "NED": self.ned,
         }
         self.log_dict(log_dict_epoch, on_step = False, on_epoch = True, prog_bar = False, logger = True, sync_dist = True)
 
@@ -943,7 +947,7 @@ class FocalSTR(pl.LightningModule):
         self.train_d_acc = DiacriticAccuracy(threshold = self.threshold)
         self.train_grp_acc = CharGrpAccuracy(threshold= self.threshold)
         # self.train_wrr = ComprihensiveWRR(threshold= self.threshold)
-        self.train_wrr = WRR()
+        self.train_wrr2 = WRR2(threshold= self.threshold)
         # Validation Metrics
         self.val_h_c_1_acc = HalfCharacterAccuracy(threshold = self.threshold)
         self.val_h_c_2_acc = HalfCharacterAccuracy(threshold = self.threshold)
@@ -952,7 +956,7 @@ class FocalSTR(pl.LightningModule):
         self.val_d_acc = DiacriticAccuracy(threshold = self.threshold)
         self.val_grp_acc = CharGrpAccuracy(threshold= self.threshold)
         # self.val_wrr = ComprihensiveWRR(threshold= self.threshold)
-        self.val_wrr = WRR()
+        self.val_wrr2 = WRR2(threshold= self.threshold)
         # Testing Metrics
         self.test_h_c_1_acc = HalfCharacterAccuracy(threshold = self.threshold)
         self.test_h_c_2_acc = HalfCharacterAccuracy(threshold = self.threshold)
@@ -960,8 +964,9 @@ class FocalSTR(pl.LightningModule):
         self.test_f_c_acc = FullCharacterAccuracy(threshold = self.threshold)
         self.test_d_acc = DiacriticAccuracy(threshold = self.threshold)
         self.test_grp_acc = CharGrpAccuracy(threshold= self.threshold)
-        # self.test_wrr = ComprihensiveWRR(threshold= self.threshold)
         self.test_wrr = WRR()
+        self.test_wrr2 = WRR2(threshold= self.threshold)
+        self.ned = NED()
 
     def forward(self, x:torch.Tensor)-> Tuple[Tensor, Tensor, Tensor, Tensor]:
         enc_x = self.encoder(x)
@@ -1097,9 +1102,9 @@ class FocalSTR(pl.LightningModule):
         self.train_grp_acc((flat_h_c_2_logits, flat_h_c_1_logits, flat_f_c_logits, flat_d_logits),\
                            (flat_h_c_2_targets, flat_h_c_1_targets, flat_f_c_targets, flat_d_targets))
         # Word level metric
-        # self.train_wrr((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits),\
-        #                (h_c_2_targets, h_c_1_targets, f_c_targets, d_targets))
-        self.train_wrr(pred_strs= self.tokenizer.decode((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits)), target_strs= labels)
+        self.train_wrr2((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits),\
+                       (h_c_2_targets, h_c_1_targets, f_c_targets, d_targets), self.tokenizer.pad_id)
+        # self.train_wrr(pred_strs= self.tokenizer.decode((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits)), target_strs= labels)
 
         if batch_no % 1000000 == 0:
             pred_labels = self.tokenizer.decode((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits))            
@@ -1120,7 +1125,7 @@ class FocalSTR(pl.LightningModule):
             "train_combined_half_character_acc": self.train_comb_h_c_acc,
             "train_character_acc": self.train_f_c_acc,
             "train_diacritic_acc": self.train_d_acc,
-            "train_wrr_epoch": self.train_wrr, 
+            "train_wrr2_epoch": self.train_wrr2, 
             "train_grp_acc_epoch": self.train_grp_acc,
         }
         self.log_dict(log_dict_epoch, on_step = False, on_epoch = True, prog_bar = False, logger = True, sync_dist = True)  
@@ -1166,9 +1171,9 @@ class FocalSTR(pl.LightningModule):
         self.val_grp_acc((flat_h_c_2_logits, flat_h_c_1_logits, flat_f_c_logits, flat_d_logits),\
                            (flat_h_c_2_targets, flat_h_c_1_targets, flat_f_c_targets, flat_d_targets))
         # Word level metric
-        # self.val_wrr((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits),\
-        #              (h_c_2_targets, h_c_1_targets, f_c_targets, d_targets))
-        self.val_wrr(pred_strs= self.tokenizer.decode((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits)), target_strs= labels)
+        self.val_wrr2((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits),\
+                     (h_c_2_targets, h_c_1_targets, f_c_targets, d_targets), self.tokenizer.pad_id)
+        # self.val_wrr(pred_strs= self.tokenizer.decode((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits)), target_strs= labels)
         
         if batch_no % 100000 == 0:
             pred_labels = self.tokenizer.decode((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits))            
@@ -1182,8 +1187,8 @@ class FocalSTR(pl.LightningModule):
             "val_combined_half_character_acc": self.val_comb_h_c_acc,
             "val_character_acc": self.val_f_c_acc,
             "val_diacritic_acc": self.val_d_acc,
-            "val_wrr_epoch": self.val_wrr, 
-            "val_grp_acc_epoch": self.val_grp_acc,
+            "val_wrr2": self.val_wrr2, 
+            "val_grp_acc": self.val_grp_acc,
         }
         self.log_dict(log_dict_epoch, on_step = False, on_epoch = True, prog_bar = False, logger = True, sync_dist = True)
 
@@ -1227,11 +1232,12 @@ class FocalSTR(pl.LightningModule):
                            (flat_h_c_2_targets, flat_h_c_1_targets, flat_f_c_targets, flat_d_targets))
         
         # Word level metric
-        # self.test_wrr((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits),\
-        #               (h_c_2_targets, h_c_1_targets, f_c_targets, d_targets))
-        self.test_wrr(pred_strs= self.tokenizer.decode((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits)), target_strs= labels)
+        self.test_wrr2(logits= (h_c_2_logits, h_c_1_logits, f_c_logits, d_logits),\
+                      targets= (h_c_2_targets, h_c_1_targets, f_c_targets, d_targets), pad_id= self.tokenizer.pad_id)
         
-        pred_labels = self.tokenizer.decode((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits))            
+        pred_labels= self.tokenizer.decode((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits))
+        self.test_wrr(pred_strs= pred_labels, target_strs= labels)        
+        self.ned(pred_labels= pred_labels, target_labels= labels)           
         self._log_tb_images(imgs, pred_labels= pred_labels, gt_labels= labels, mode= "test")
             
         # On epoch only logs
@@ -1242,8 +1248,10 @@ class FocalSTR(pl.LightningModule):
             "test_combined_half_character_acc": self.test_comb_h_c_acc,
             "test_character_acc": self.test_f_c_acc,
             "test_diacritic_acc": self.test_d_acc,
-            "test_wrr_epoch": self.test_wrr, 
-            "test_grp_acc_epoch": self.test_grp_acc,
+            "test_wrr": self.test_wrr,
+            "test_wrr2": self.test_wrr2,
+            "test_grp_acc": self.test_grp_acc,
+            "NED": self.ned,
         }
         self.log_dict(log_dict_epoch, on_step = False, on_epoch = True, prog_bar = False, logger = True, sync_dist = True)
 
@@ -1251,4 +1259,3 @@ class FocalSTR(pl.LightningModule):
         (h_c_2_logits, h_c_1_logits, f_c_logits, d_logits) = self.forward(batch)
         pred_labels = self.tokenizer.decode((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits))
         return pred_labels, (h_c_2_logits, h_c_1_logits, f_c_logits, d_logits)
-
