@@ -1,6 +1,6 @@
 img_size: 128
 log_dir: /global/D1/homes/rohitn/GrpNet_logs
-name: vitstr_train
+name: vitstr_train_pretrain_w_glyphs
 version: ${oc.env:SLURM_JOB_ID}
 ckpt_path: null
 half_character_classes: [ 'क', 'ख', 'ग', 'घ', 'ङ',
@@ -42,9 +42,9 @@ transforms:
   
 datamodule:
   _target_: data.module.LMDBHindiDataModule
-  train_dir: /home/rohitn/D1/HindiGlyphSynth/hindi_synth_lmdb
-  val_dir: /home/rohitn/D1/HindiGlyphSynth/hindi_synth_val_lmdb
-  test_dir: /home/rohitn/D1/HindiGlyphSynth/hindi_real
+  train_dir: /home/rohitn/D1/HindiGlyphSynth/train1_lmdb
+  val_dir: /home/rohitn/D1/HindiGlyphSynth/val_lmdb
+  test_dir: null
   batch_size: 64 
   num_workers: 8
   drop_last: false
@@ -69,10 +69,10 @@ tensorboard_logger:
 model_checkpoint:
   _target_: lightning.pytorch.callbacks.ModelCheckpoint
   dirpath: ${log_dir}/${name}/${version}/checkpoints/      
-  filename: "{epoch}-{val_loss_epoch:.2f}-{val_wrr_epoch:.2f}"
-  monitor: val_loss_epoch
+  filename: "{epoch}-{val_loss:.2f}-{val_wrr2:.2f}"
+  monitor: val_loss
   mode: min
-  save_top_k: 2
+  save_top_k: 1
   save_last: true
 
 training:
@@ -80,7 +80,7 @@ training:
   accelerator: gpu # options are cpu or gpu
   strategy: ddp # only use when gpu is available
   devices: 2
-  max_epochs: 10
+  max_epochs: 8
   # max_steps: 1000
   check_val_every_n_epoch: 1
   gradient_clip_val: 10

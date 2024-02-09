@@ -1,11 +1,10 @@
-log_dir: /global/D1/homes/rohitn/GrpNet_logs
-dataset_name: IndicSTR12
-ckpt_root: /home/rohitn/D1/GrpNet_logs/vitstr_train/122261/checkpoints # do not keep a trailing "/"
-ckpt_filename: epoch=7-val_loss_epoch=0.09-val_wrr_epoch=0.75.ckpt
+dataset_name: IndicSTR12_${oc.env:SLURM_JOB_ID}
+ckpt_root: /home/rohitn/D1/GrpNet_logs/vitstr_train/123309/checkpoints # do not keep a trailing "/"
+ckpt_filename: epoch=7-val_loss_epoch=0.13-val_wrr_epoch=0.70.ckpt
 
 model:
-#  _target_: model.net.ViTSTR.load_from_checkpoint
-  _target_: model.net.ViTSTR.load_from_checkpoint
+  _target_: model.net.FocalSTR.load_from_checkpoint
+  # _target_: model.net.ViTSTR.load_from_checkpoint
   checkpoint_path: ${ckpt_root}/${ckpt_filename}
   
 datamodule:
