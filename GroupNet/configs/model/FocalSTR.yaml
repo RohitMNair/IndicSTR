@@ -1,4 +1,4 @@
-_target_: model.net.FocalSTR
+_target_: model.FocalSTR.net.FocalSTR
 hidden_sizes: [192, 384, 768, 768]
 embed_dim: 96
 depths: [2, 2, 6, 2]

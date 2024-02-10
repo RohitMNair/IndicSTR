@@ -3,8 +3,8 @@ ckpt_root: /home/rohitn/D1/GrpNet_logs/vitstr_train/123309/checkpoints # do not 
 ckpt_filename: epoch=7-val_loss_epoch=0.13-val_wrr_epoch=0.70.ckpt
 
 model:
-  _target_: model.net.FocalSTR.load_from_checkpoint
-  # _target_: model.net.ViTSTR.load_from_checkpoint
+  _target_: model.FocalSTR.net.FocalSTR.load_from_checkpoint
+  # _target_: model.ViTSTR.net.ViTSTR.load_from_checkpoint
   checkpoint_path: ${ckpt_root}/${ckpt_filename}
   
 datamodule:
