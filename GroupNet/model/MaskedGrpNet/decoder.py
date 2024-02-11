@@ -12,5 +12,9 @@ import torch
 import torch.nn as nn
 
 class PLMDecoder(pl.LightningModule):
+    """
+    Group implementation of Permuted Sequence modelling
+    """
     def __init__(self):
+        
         

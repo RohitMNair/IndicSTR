@@ -356,3 +356,6 @@ class Tokenizer:
             label = ""
         
         return tuple(pred_labels)
+
+# class MalayalamTokenizer():
+#     def __init__(self)

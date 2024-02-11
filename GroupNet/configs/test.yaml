@@ -1,6 +1,6 @@
 dataset_name: IndicSTR12_${oc.env:SLURM_JOB_ID}
-ckpt_root: /home/rohitn/D1/GrpNet_logs/vitstr_train/123309/checkpoints # do not keep a trailing "/"
-ckpt_filename: epoch=7-val_loss_epoch=0.13-val_wrr_epoch=0.70.ckpt
+ckpt_root: /home/rohitn/D1/GrpNet_logs/vitstr_train_pretrain_w_glyphs/FocalSTR_129169/train_on_data/checkpoints # do not keep a trailing "/"
+ckpt_filename: epoch=7-val_loss=0.28-val_wrr2=0.67.ckpt
 
 model:
   _target_: model.FocalSTR.net.FocalSTR.load_from_checkpoint

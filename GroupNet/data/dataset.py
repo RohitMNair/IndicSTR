@@ -62,6 +62,7 @@ class HindiLMDBDataset(Dataset):
                     print(f"Processed {index} number of labels", flush = True)
 
                 if len(self.tokenizer.hindi_label_transform(label)) == 0:
+                    # The label is does not follow the group convention
                     continue
                 else:
                     self.items.append(label)

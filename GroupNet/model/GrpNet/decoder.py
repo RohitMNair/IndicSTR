@@ -95,7 +95,7 @@ class GrpMHA(pl.LightningModule):
         self.h_c_2_emb = half_character_2_embeddings
         self.d_emb = diacritics_embeddigs
         self.char_embed_dim = char_embed_dim
-        self.combined_emb = nn.Parameter(torch.cat([self.h_c_2_emb, self.h_c_1_emb, self.f_c_emb, self.d_emb], dim= 0))
+        # self.combined_emb = nn.Parameter(torch.cat([self.h_c_2_emb, self.h_c_1_emb, self.f_c_emb, self.d_emb], dim= 0))
         self.num_heads = num_heads
         self.grp_attn = nn.MultiheadAttention(
                                             embed_dim= self.hidden_size, 
@@ -118,10 +118,28 @@ class GrpMHA(pl.LightningModule):
 
 
 class GroupDecoder(pl.LightningModule):
+    """
+    Group Decoder which decodes characters based on similarity with the group embeddings taken from the Img2Vec model
+    """
     def __init__(self, half_character_2_embeddings:Tensor, half_character_1_embeddings:Tensor,
                  full_character_embeddings:Tensor, diacritics_embeddigs:Tensor, char_embed_dim:int,
                  hidden_size:int= 1024, mlp_ratio:float= 4.0, layer_norm_eps:float= 1.0e-12, max_grps:int= 25,
                  num_heads:int= 6, hidden_dropout_prob:float= 0.0, attention_probs_dropout_prob:float= 0.0)-> None:
+        """
+        Constructor for GroupDecoder
+        Args:
+         half_character_2_embeddings (Tensor): vector embeddings for the half-character 2 shape: (# of half-chars x embedding dim)
+         half_character_1_embeddings (Tensor): embeddings for half-characters 1 shape: (# of half-chars x embedding dim)
+         full_character_embeddings (Tensor): embeddings for full-characters shape: (# of full-chars x embedding dim)
+         diacritics_embeddigs (Tensor): embeddings for diacritics-characters shape: (# of diacritic-chars x embedding dim)
+         hidden_size (int): sizes of linear layers in the Multi-head attention blocks (default: 1024)
+         mlp_ratio (float): size of the hidden_layer to intermediate layer in MLP block (default: 4.0)
+         layer_norm_eps (float): layer norm epsilon
+         max_grps (int): Maximum groups the decoder will need to predict (default: 25)
+         num_heads (int): # of heads in the position-visual MHA block (default: 6)
+         hidden_dropout_prob (float): dropout probability for the hidden linear layers (default: .0)
+         attention_probs_dropout_prob (float): dropout probability for MHA Blocks
+        """
         super().__init__()
         self.h_c_2_emb = half_character_2_embeddings
         self.h_c_1_emb = half_character_1_embeddings
@@ -149,25 +167,25 @@ class GroupDecoder(pl.LightningModule):
                                         )
         self.hidden_dropout2 = nn.Dropout(self.hidden_dropout_prob)
         self.q_norm = nn.LayerNorm(normalized_shape= self.hidden_size, eps=self.layer_norm_eps)
-        # self.chr_grp_mha = CharGroupMHA(
-        #                                 hidden_size = self.hidden_size, 
-        #                                 full_character_embeddings= self.f_c_emb,
-        #                                 half_character_1_embeddings= self.h_c_1_emb,
-        #                                 half_character_2_embeddings= self.h_c_2_emb,
-        #                                 diacritics_embeddigs= self.d_emb,
-        #                                 char_embed_dim= self.char_embed_dim,
-        #                                 dropout = self.attention_probs_dropout_prob,
-        #                             )
-        self.chr_grp_mha = GrpMHA(
-                                hidden_size = self.hidden_size, 
-                                full_character_embeddings= self.f_c_emb,
-                                half_character_1_embeddings= self.h_c_1_emb,
-                                half_character_2_embeddings= self.h_c_2_emb,
-                                diacritics_embeddigs= self.d_emb,
-                                char_embed_dim= self.char_embed_dim,
-                                dropout = self.attention_probs_dropout_prob,
-                                num_heads= self.num_heads,
-        )
+        self.chr_grp_mha = CharGroupMHA(
+                                        hidden_size = self.hidden_size, 
+                                        full_character_embeddings= self.f_c_emb,
+                                        half_character_1_embeddings= self.h_c_1_emb,
+                                        half_character_2_embeddings= self.h_c_2_emb,
+                                        diacritics_embeddigs= self.d_emb,
+                                        char_embed_dim= self.char_embed_dim,
+                                        dropout = self.attention_probs_dropout_prob,
+                                    )
+        # self.chr_grp_mha = GrpMHA(
+        #                         hidden_size = self.hidden_size, 
+        #                         full_character_embeddings= self.f_c_emb,
+        #                         half_character_1_embeddings= self.h_c_1_emb,
+        #                         half_character_2_embeddings= self.h_c_2_emb,
+        #                         diacritics_embeddigs= self.d_emb,
+        #                         char_embed_dim= self.char_embed_dim,
+        #                         dropout = self.attention_probs_dropout_prob,
+        #                         num_heads= self.num_heads,
+        # )
         self.hidden_dropout3 = nn.Dropout(self.hidden_dropout_prob)
         self.mlp_norm = nn.LayerNorm(normalized_shape= self.hidden_size, eps= self.layer_norm_eps)
         self.mlp_1 = nn.Linear(self.hidden_size, self.intermediate_size, bias = True)
