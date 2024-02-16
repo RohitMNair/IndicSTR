@@ -54,8 +54,16 @@ def main(cfg: DictConfig):
                     logger = [csv_logger, tensorboard_logger]
                 )
     
-    model = instantiate(cfg.model)
-    trainer.fit(model, datamodule, ckpt_path = cfg.ckpt_path)
+    if cfg.restart_training and cfg.model_load is not None:
+        # just load model weights from the ckpt
+        model = instantiate(cfg.model_load)
+        # restart the training
+        trainer.fit(model, datamodule)
+    else: 
+        model = instantiate(cfg.model)
+        # continue training by loading training state from the checkpoint
+        trainer.fit(model, datamodule, ckpt_path = cfg.ckpt_path)
+    
 
     if cfg.datamodule.test_dir is not None:
         trainer.test(datamodule = datamodule)

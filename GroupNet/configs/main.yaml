@@ -1,11 +1,4 @@
 img_size: 128
-log_dir: /global/D1/homes/rohitn/GrpNet_logs
-name: vitstr_train
-# version: ${oc.env:SLURM_JOB_ID} # using SLURM Job Id which is obtained in the train script
-version: 122261_ViTSTR/train_on_vert # specify a sub-folder if continuing training
-# log path will be log_dir/name/version
-ckpt_path: /home/rohitn/D1/GrpNet_logs/vitstr_train/122261_ViTSTR/checkpoints/epoch=7-val_loss_epoch=0.09-val_wrr_epoch=0.75.ckpt
-
 half_character_classes: [ 'क', 'ख', 'ग', 'घ', 'ङ',
                             'च', 'छ', 'ज', 'झ', 'ञ',
                             'ट', 'ठ', 'ड', 'ढ', 'ण',
@@ -13,24 +6,51 @@ half_character_classes: [ 'क', 'ख', 'ग', 'घ', 'ङ',
                             'प', 'फ', 'ब', 'भ', 'म',
                             'य', 'र', 'ल', 'ळ', 'व', 'श',
                             'ष', 'स', 'ह']
+# full_character_classes: ['अ', 'आ', 'इ', 'ई', 'उ', 
+#                         'ऊ', 'ऋ', 'ॠ', 'ए', 'ऐ',
+#                         'ओ', 'औ', 'ॲ', 'ऍ', 'ऑ',
+#                         'क', 'ख', 'ग', 'घ', 'ङ',
+#                         'च', 'छ', 'ज', 'झ', 'ञ',
+#                         'ट', 'ठ', 'ड', 'ढ', 'ण',
+#                         'त', 'थ', 'द', 'ध', 'न',
+#                         'प', 'फ', 'ब', 'भ', 'म',
+#                         'य', 'र', 'ल', 'ळ', 'व', 
+#                         'श', 'ष', 'स', 'ह',
+#                         'ॐ', '₹', '।', '!', '$', '₹', '%', '॥','ॽ', # characters that occur independently
+#                         '०','१','२','३','४','५','६' ,'७' ,'८' ,'९', # numerals
+#                         ]
 full_character_classes: ['अ', 'आ', 'इ', 'ई', 'उ', 
-                        'ऊ', 'ऋ', 'ॠ', 'ए', 'ऐ',
-                        'ओ', 'औ', 'ॲ', 'ऍ', 'ऑ',
-                        'क', 'ख', 'ग', 'घ', 'ङ',
-                        'च', 'छ', 'ज', 'झ', 'ञ',
-                        'ट', 'ठ', 'ड', 'ढ', 'ण',
-                        'त', 'थ', 'द', 'ध', 'न',
-                        'प', 'फ', 'ब', 'भ', 'म',
-                        'य', 'र', 'ल', 'ळ', 'व', 
-                        'श', 'ष', 'स', 'ह',
-                        'ॐ', '₹', '।', '!', '$', '₹', '%', '॥','ॽ', # characters that occur independently
-                        '०','१','२','३','४','५','६' ,'७' ,'८' ,'९', # numerals
-                        ]
+                'ऊ', 'ऋ', 'ॠ', 'ए', 'ऐ',
+                'ओ', 'औ', 'ॲ', 'ऍ', 'ऑ',
+                'क', 'ख', 'ग', 'घ', 'ङ',
+                'च', 'छ', 'ज', 'झ', 'ञ',
+                'ट', 'ठ', 'ड', 'ढ', 'ण',
+                'त', 'थ', 'द', 'ध', 'न',
+                'प', 'फ', 'ब', 'भ', 'म',
+                'य', 'र', 'ल', 'ळ', 'व', 
+                'श', 'ष', 'स', 'ह',
+                'ॐ', '₹', '।', '!', '$', ',', '.', '-', '%', '॥','ॽ', # characters that occur independently
+                '०','१','२','३','४','५','६' ,'७' ,'८' ,'९', # numerals
+                ]
 diacritic_classes: ['ा','ि','ी','ु','ू','ृ', 'े','ै', 'ो', 'ौ', 'ॅ', 'ॉ', 'ँ','ं', 'ः', '़'] # ensure that halfer is not in this 
 halfer: '्'
 
-defaults: 
-  - model: ViTSTR
+log_dir: /global/D1/homes/rohitn/GrpNet_logs
+name: vitstr_train_pretrain_w_glyphs
+# using SLURM Job Id which is obtained in the train script
+# version: ${oc.env:SLURM_JOB_ID} 
+# specify a sub-folder if continuing training; log path will be: log_dir/name/version
+version: ViTSTR_128951/train_on_hori_${oc.env:SLURM_JOB_ID}_re
+ckpt_path: /home/rohitn/D1/GrpNet_logs/vitstr_train_pretrain_w_glyphs/ViTSTR_128951/checkpoints/epoch=5-val_loss=0.13-val_wrr2=0.81.ckpt
+restart_training: true # if training state needs a fresh start
+
+model_load: # this won't be used if restart_training is false
+  # _target_: model.FocalSTR.net.FocalSTR.load_from_checkpoint
+  _target_: model.ViTSTR.net.ViTSTR.load_from_checkpoint
+  checkpoint_path: ${ckpt_path}
+
+defaults: # this wont be used if restart_training is true
+  - model: ViTSTR # Options are FocalSTR, ViTSTR, GrpNet
   - _self_
 
 model:
@@ -45,10 +65,10 @@ transforms:
   
 datamodule:
   _target_: data.module.LMDBHindiDataModule
-  # train_dir: /home/rohitn/D1/HindiGlyphSynth/hindi_synth_lmdb
-  # val_dir: /home/rohitn/D1/HindiGlyphSynth/hindi_synth_val_lmdb
-  train_dir: /home/rohitn/D1/HindiGlyphSynth/hindi_vertical_synth_lmdb
-  val_dir: /home/rohitn/D1/HindiGlyphSynth/hindi_vertical_synth_val_lmdb
+  train_dir: /home/rohitn/D1/HindiGlyphSynth/hindi_synth_lmdb
+  val_dir: /home/rohitn/D1/HindiGlyphSynth/hindi_synth_val_lmdb
+  # train_dir: /home/rohitn/D1/HindiGlyphSynth/hindi_vertical_synth_lmdb
+  # val_dir: /home/rohitn/D1/HindiGlyphSynth/hindi_vertical_synth_val_lmdb
   test_dir: null
   batch_size: 64 
   num_workers: 8
@@ -84,7 +104,7 @@ training:
   accelerator: gpu # options are cpu or gpu
   strategy: ddp # only use when gpu is available
   devices: 2
-  max_epochs: 7
+  max_epochs: 8
   # max_steps: 1000
   check_val_every_n_epoch: 1
   gradient_clip_val: 10
