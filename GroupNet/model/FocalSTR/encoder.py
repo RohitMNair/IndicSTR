@@ -14,7 +14,7 @@ class FocalNetEncoder(pl.LightningModule):
                             patch_size = patch_size,
                             num_channels = num_channels,
                             embed_dim = embed_dim,
-                            use_conv_embed = True,
+                            use_conv_embed = True, # better learning
                             hidden_sizes = hidden_sizes,
                             depths = depths,
                             focal_levels = focal_levels,

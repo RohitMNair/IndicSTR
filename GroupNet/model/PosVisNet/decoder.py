@@ -9,7 +9,7 @@ class PosVisDecoder(pl.LightningModule):
     Position Visual Decoder which performs MHA over learned positional encodings and encoder visual embeddings
     """
     def __init__(self, hidden_size:int= 1024, mlp_ratio:float= 4.0, layer_norm_eps:float= 1.0e-12, max_grps:int= 25,
-                 num_heads:int= 6, hidden_dropout_prob:float= 0.0, attention_probs_dropout_prob:float= 0.0)-> None:
+                 num_heads:int= 6, hidden_dropout_prob:float= 0.0, attention_probs_dropout_prob:float= 0.0, qkv_bias:bool= True)-> None:
         """
         Constructor for GroupDecoder
         Args:
@@ -30,15 +30,16 @@ class PosVisDecoder(pl.LightningModule):
         self.intermediate_size = int(self.mlp_ratio * self.hidden_size)
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.hidden_dropout_prob = hidden_dropout_prob
+        self.qkv_bias = qkv_bias
 
         self.positional_encodings = nn.Parameter(torch.randn(self.max_grps, self.hidden_size))
         self.hidden_dropout1 = nn.Dropout(self.hidden_dropout_prob)
         self.pos_norm = nn.LayerNorm(normalized_shape= self.hidden_size, eps=self.layer_norm_eps)
         self.pos_vis_mha = nn.MultiheadAttention(
-                                            embed_dim= hidden_size, 
+                                            embed_dim= self.hidden_size, 
                                             num_heads= self.num_heads, 
                                             dropout= self.attention_probs_dropout_prob, 
-                                            add_bias_kv= True,
+                                            add_bias_kv= self.qkv_bias,
                                             batch_first= True,
                                         )
         self.hidden_dropout2 = nn.Dropout(self.hidden_dropout_prob)
@@ -54,10 +55,10 @@ class PosVisDecoder(pl.LightningModule):
         """
         Performs Position-Visual attention for identifying the positions of the character groups
         Args:
-        - x (Tensor): Vector patch representations from a Vision encoder; shape: (N x encoder embed. dim.)
+        - x (Tensor): Vector patch representations from a Vision encoder; shape: (BS x N x hidden size)
 
         Returns:
-        - tuple: output patch representations shape:
+        - tuple(Tensor, Tensor): output patch representations shape: (BS x Max Grps x hidden size)
         """
         x = self.hidden_dropout1(x)
         # ViT outputs are layer norm'd

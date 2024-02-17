@@ -6,7 +6,7 @@ from utils.metrics import (DiacriticAccuracy, FullCharacterAccuracy, CharGrpAccu
                    HalfCharacterAccuracy, CombinedHalfCharAccuracy, WRR, WRR2, ComprihensiveWRR)
 from torch.optim import AdamW, Adam
 from torch.optim.lr_scheduler import OneCycleLR
-from typing import Tuple, Optional
+from typing import Tuple
 from torch import Tensor
 from data.tokenizer import Tokenizer
 
@@ -95,6 +95,7 @@ class GroupNet(pl.LightningModule):
             num_heads= self.num_attention_heads,
             hidden_dropout_prob= self.hidden_dropout_prob,
             attention_probs_dropout_prob= self.attention_probs_dropout_prob,
+            qkv_bias= self.qkv_bias
         )
 
         self.classifier = GrpClassifier(

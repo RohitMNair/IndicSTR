@@ -13,7 +13,7 @@ class CharGroupMHA(pl.LightningModule):
     """
     def __init__(self, hidden_size: int, full_character_embeddings:Tensor,
                  half_character_2_embeddings:Tensor, half_character_1_embeddings:Tensor, 
-                 diacritics_embeddigs:Tensor, dropout:float= 0.0)->None:
+                 diacritics_embeddigs:Tensor, dropout:float= 0.0, qkv_bias:bool = True)->None:
         """
         Constructor for Character Group Attention block
         Args:
@@ -27,6 +27,7 @@ class CharGroupMHA(pl.LightningModule):
         super().__init__()
         self.dropout = nn.Dropout(dropout)
         self.hidden_size = hidden_size
+        self.qkv_bias = qkv_bias
         self.f_c_emb = full_character_embeddings
         self.h_c_1_emb = half_character_1_embeddings
         self.h_c_2_emb = half_character_2_embeddings
@@ -37,26 +38,26 @@ class CharGroupMHA(pl.LightningModule):
         self.projection_size = self.hidden_size // 4
 
         # half character 2
-        self.query_proj_h_c_2 = nn.Linear(self.hidden_size, self.projection_size, bias = True)
-        self.key_proj_h_c_2 = nn.Linear(self.char_embed_dim, self.projection_size, bias = True)
-        self.value_proj_h_c_2 = nn.Linear(self.char_embed_dim, self.projection_size, bias = True)
+        self.query_proj_h_c_2 = nn.Linear(self.hidden_size, self.projection_size, bias = self.qkv_bias)
+        self.key_proj_h_c_2 = nn.Linear(self.char_embed_dim, self.projection_size, bias = self.qkv_bias)
+        self.value_proj_h_c_2 = nn.Linear(self.char_embed_dim, self.projection_size, bias = self.qkv_bias)
         
         # half character 1
-        self.query_proj_h_c_1 = nn.Linear(self.hidden_size, self.projection_size, bias = True)
-        self.key_proj_h_c_1 = nn.Linear(self.char_embed_dim, self.projection_size, bias= True)
-        self.value_proj_h_c_1 = nn.Linear(self.char_embed_dim, self.projection_size, bias= True)
+        self.query_proj_h_c_1 = nn.Linear(self.hidden_size, self.projection_size, bias = self.qkv_bias)
+        self.key_proj_h_c_1 = nn.Linear(self.char_embed_dim, self.projection_size, bias= self.qkv_bias)
+        self.value_proj_h_c_1 = nn.Linear(self.char_embed_dim, self.projection_size, bias= self.qkv_bias)
 
         # full character
-        self.query_proj_f_c = nn.Linear(self.hidden_size, self.projection_size, bias = True)
-        self.key_proj_f_c = nn.Linear(self.char_embed_dim, self.projection_size , bias= True)
-        self.value_proj_f_c = nn.Linear(self.char_embed_dim, self.projection_size , bias= True)
+        self.query_proj_f_c = nn.Linear(self.hidden_size, self.projection_size, bias = self.qkv_bias)
+        self.key_proj_f_c = nn.Linear(self.char_embed_dim, self.projection_size , bias= self.qkv_bias)
+        self.value_proj_f_c = nn.Linear(self.char_embed_dim, self.projection_size , bias= self.qkv_bias)
         
         # diacritic
-        self.query_proj_d = nn.Linear(self.hidden_size, self.projection_size, bias = True)
-        self.key_proj_d = nn.Linear(self.char_embed_dim, self.projection_size, bias = True)
-        self.value_proj_d = nn.Linear(self.char_embed_dim, self.projection_size, bias = True)
+        self.query_proj_d = nn.Linear(self.hidden_size, self.projection_size, bias = self.qkv_bias)
+        self.key_proj_d = nn.Linear(self.char_embed_dim, self.projection_size, bias = self.qkv_bias)
+        self.value_proj_d = nn.Linear(self.char_embed_dim, self.projection_size, bias = self.qkv_bias)
 
-        self.out_proj = nn.Linear(self.hidden_size, self.hidden_size, bias= True)
+        self.out_proj = nn.Linear(self.hidden_size, self.hidden_size, bias= self.qkv_bias)
 
 
     def scaled_dot_product_attention(self, query: Tensor, key: Tensor, value: Tensor)-> tuple:
@@ -120,38 +121,38 @@ class CharGroupMHA(pl.LightningModule):
         context = self.out_proj(context)
         return context, (attention_probs_h_c_2, attention_probs_h_c_1, attention_probs_f_c, attention_probs_d)
     
-class GrpMHA(pl.LightningModule):
-    def __init__(self, hidden_size: int, full_character_embeddings:Tensor,
-                half_character_2_embeddings:Tensor, half_character_1_embeddings:Tensor, 
-                diacritics_embeddigs:Tensor, num_heads: int, char_embed_dim:int, dropout:float= 0.0):
-        super().__init__()
-        self.dropout = dropout
-        self.hidden_size = hidden_size
-        self.f_c_emb = full_character_embeddings
-        self.h_c_2_emb = half_character_2_embeddings
-        self.h_c_1_emb = half_character_1_embeddings
-        self.d_emb = diacritics_embeddigs
-        self.char_embed_dim = char_embed_dim
-        # self.combined_emb = nn.Parameter(torch.cat([self.h_c_2_emb, self.h_c_1_emb, self.f_c_emb, self.d_emb], dim= 0))
-        self.num_heads = num_heads
-        self.grp_attn = nn.MultiheadAttention(
-                                            embed_dim= self.hidden_size, 
-                                            kdim= self.char_embed_dim,
-                                            vdim= self.char_embed_dim,
-                                            num_heads= self.num_heads, 
-                                            dropout= self.dropout, 
-                                            add_bias_kv= True,
-                                            batch_first= True,
-                                        )
+# class GrpMHA(pl.LightningModule):
+#     def __init__(self, hidden_size: int, full_character_embeddings:Tensor,
+#                 half_character_2_embeddings:Tensor, half_character_1_embeddings:Tensor, 
+#                 diacritics_embeddigs:Tensor, num_heads: int, char_embed_dim:int, dropout:float= 0.0):
+#         super().__init__()
+#         self.dropout = dropout
+#         self.hidden_size = hidden_size
+#         self.f_c_emb = full_character_embeddings
+#         self.h_c_2_emb = half_character_2_embeddings
+#         self.h_c_1_emb = half_character_1_embeddings
+#         self.d_emb = diacritics_embeddigs
+#         self.char_embed_dim = char_embed_dim
+#         self.combined_emb = nn.Parameter(torch.cat([self.h_c_2_emb, self.h_c_1_emb, self.f_c_emb, self.d_emb], dim= 0))
+#         self.num_heads = num_heads
+#         self.grp_attn = nn.MultiheadAttention(
+#                                             embed_dim= self.hidden_size, 
+#                                             kdim= self.char_embed_dim,
+#                                             vdim= self.char_embed_dim,
+#                                             num_heads= self.num_heads, 
+#                                             dropout= self.dropout, 
+#                                             add_bias_kv= True,
+#                                             batch_first= True,
+#                                         )
     
-    def forward(self, x:Tensor):
-        self.combined_emb = self.combined_emb.to(self.device)
-        x, attn_weights = self.grp_attn(
-                                        query= x,
-                                        key= self.combined_emb.expand(x.shape[0], -1, -1),
-                                        value= self.combined_emb.expand(x.shape[0], -1, -1),
-                                    )
-        return x, attn_weights
+#     def forward(self, x:Tensor):
+#         self.combined_emb = self.combined_emb.to(self.device)
+#         x, attn_weights = self.grp_attn(
+#                                         query= x,
+#                                         key= self.combined_emb.expand(x.shape[0], -1, -1),
+#                                         value= self.combined_emb.expand(x.shape[0], -1, -1),
+#                                     )
+#         return x, attn_weights
 
 
 class GroupDecoder(pl.LightningModule):
@@ -160,7 +161,7 @@ class GroupDecoder(pl.LightningModule):
     """
     def __init__(self, half_character_2_embeddings:Tensor, half_character_1_embeddings:Tensor,
                  full_character_embeddings:Tensor, diacritics_embeddigs:Tensor, hidden_size:int= 1024, 
-                 mlp_ratio:float= 4.0, layer_norm_eps:float= 1.0e-12, max_grps:int= 25,
+                 mlp_ratio:float= 4.0, layer_norm_eps:float= 1.0e-12, max_grps:int= 25, qkv_bias:bool = True,
                  num_heads:int= 6, hidden_dropout_prob:float= 0.0, attention_probs_dropout_prob:float= 0.0)-> None:
         """
         Constructor for GroupDecoder
@@ -169,13 +170,13 @@ class GroupDecoder(pl.LightningModule):
         - half_character_1_embeddings (Tensor): embeddings for half-characters 1 shape: (# of half-chars x embedding dim)
         - full_character_embeddings (Tensor): embeddings for full-characters shape: (# of full-chars x embedding dim)
         - diacritics_embeddigs (Tensor): embeddings for diacritics-characters shape: (# of diacritic-chars x embedding dim)
-        - hidden_size (int): sizes of linear layers in the Multi-head attention blocks (default: 1024)
-        - mlp_ratio (float): size of the hidden_layer to intermediate layer in MLP block (default: 4.0)
-        - layer_norm_eps (float): layer norm epsilon
-        - max_grps (int): Maximum groups the decoder will need to predict (default: 25)
-        - num_heads (int): # of heads in the position-visual MHA block (default: 6)
-        - hidden_dropout_prob (float): dropout probability for the hidden linear layers (default: .0)
-        - attention_probs_dropout_prob (float): dropout probability for MHA Blocks
+        - hidden_size (int, default= 1024): sizes of linear layers in the Multi-head attention blocks
+        - mlp_ratio (float, default= 4.0): size of the hidden_layer to intermediate layer in MLP block 
+        - layer_norm_eps (float, default= 1.0e-12): layer norm epsilon
+        - max_grps (int, default= 25): Maximum groups the decoder will need to predict
+        - num_heads (int, default= 6): # of heads in the position-visual MHA block
+        - hidden_dropout_prob (float, default= 0.0): dropout probability for the hidden linear layers
+        - attention_probs_dropout_prob (float, defualt= 0.0): dropout probability for MHA Blocks
         """
         super().__init__()
         self.h_c_2_emb = half_character_2_embeddings
@@ -186,6 +187,7 @@ class GroupDecoder(pl.LightningModule):
         self.hidden_size = hidden_size
         self.mlp_ratio = mlp_ratio
         self.max_grps = max_grps
+        self.qkv_bias = qkv_bias
         self.num_heads = num_heads
         self.intermediate_size = int(self.mlp_ratio * self.hidden_size)
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
@@ -198,7 +200,7 @@ class GroupDecoder(pl.LightningModule):
                                             embed_dim= hidden_size, 
                                             num_heads= self.num_heads, 
                                             dropout= self.attention_probs_dropout_prob, 
-                                            add_bias_kv= True,
+                                            add_bias_kv= self.qkv_bias,
                                             batch_first= True,
                                         )
         self.hidden_dropout2 = nn.Dropout(self.hidden_dropout_prob)
@@ -210,6 +212,7 @@ class GroupDecoder(pl.LightningModule):
                                         half_character_2_embeddings= self.h_c_2_emb,
                                         diacritics_embeddigs= self.d_emb,
                                         dropout = self.attention_probs_dropout_prob,
+                                        qkv_bias = self.qkv_bias
                                     )
         # self.chr_grp_mha = GrpMHA(
         #                         hidden_size = self.hidden_size, 
