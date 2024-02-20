@@ -1,4 +1,4 @@
-backbone: resnet_50
+backbone: resnet
 # ckpt_path: /home/rohitn/D1/Hindi_embed_logs/Img2Vec_resnet_50_r512/82574/train1/checkpoints/epoch=12-val_loss=0.24-val_acc=0.84.ckpt
 ckpt_path: null
 img_size: 128
@@ -16,23 +16,6 @@ model: # for resnet
 
 Img2Vec:
   _target_: model.Img2Vec.Img2Vec
-  character_classes: ['अ', 'आ', 'इ', 'ई', 'उ', 'ऊ', 'ऋ', 'ॠ', 'ए', 'ऐ',
-                      'ओ', 'औ', 'ॲ', 'ऍ', 'ऑ',
-                      'क', 'ख', 'ग', 'घ', 'ङ',
-                      'च', 'छ', 'ज', 'झ', 'ञ',
-                      'ट', 'ठ', 'ड', 'ढ', 'ण',
-                      'त', 'थ', 'द', 'ध', 'न',
-                      'प', 'फ', 'ब', 'भ', 'म',
-                      'य', 'र', 'ल', 'ळ', 'व', 'श',
-                      'ष', 'स', 'ह',
-                      #'क़', 'ख़', 'ग़', 'ज़', 'झ़', 'ड़', 'ढ़', 'फ़' # these will be handled by the matra '़'
-                      # For real text, each of these will be converted to vyanjan + matra
-                      'ॐ', '₹', '।', '!', '$', '₹', '%', '॥','ॽ', # characters that occur independently
-                      '०','१','२','३','४','५','६' ,'७' ,'८' ,'९',
-                      ]
-
-  diacritic_classes: ['ा','ि','ी','ु','ू','ृ', 'े','ै', 'ो', 'ौ', 'ॅ', 'ॉ', 'ँ','ं', 'ः', '़'] # ensure that halfer is not in this
-    
   half_character_classes: [ 'क', 'ख', 'ग', 'घ', 'ङ',
                             'च', 'छ', 'ज', 'झ', 'ञ',
                             'ट', 'ठ', 'ड', 'ढ', 'ण',
@@ -40,6 +23,22 @@ Img2Vec:
                             'प', 'फ', 'ब', 'भ', 'म',
                             'य', 'र', 'ल', 'ळ', 'व', 'श',
                             'ष', 'स', 'ह']
+  character_classes: ['अ', 'आ', 'इ', 'ई', 'उ', 
+                      'ऊ', 'ऋ', 'ॠ', 'ए', 'ऐ',
+                      'ओ', 'औ', 'ॲ', 'ऍ', 'ऑ',
+                      'क', 'ख', 'ग', 'घ', 'ङ',
+                      'च', 'छ', 'ज', 'झ', 'ञ',
+                      'ट', 'ठ', 'ड', 'ढ', 'ण',
+                      'त', 'थ', 'द', 'ध', 'न',
+                      'प', 'फ', 'ब', 'भ', 'म',
+                      'य', 'र', 'ल', 'ळ', 'व', 
+                      'श', 'ष', 'स', 'ह',
+                      'ॐ', '₹', '।', '!', '$', ',', '.', '-', '%', '॥','ॽ', # characters that occur independently
+                      '०','१','२','३','४','५','६' ,'७' ,'८' ,'९', # numerals
+                      ]
+
+  diacritic_classes: ['ा','ि','ी','ु','ू','ृ', 'े','ै', 'ो', 'ौ', 'ॅ', 'ॉ', 'ँ','ं', 'ः', '़'] # ensure that halfer is not in this
+
   optimizer:
     _partial_: true
     _target_: torch.optim.AdamW
@@ -47,7 +46,7 @@ Img2Vec:
   weight_decay: 0.0
   threshold: 0.5
   backbone: ${model}
-  rep_dim: 1024
+  rep_dim: 256
   activation:
     _target_: torch.nn.GELU
     
@@ -81,20 +80,20 @@ datamodule:
   diacritics: ${Img2Vec.diacritic_classes}
   halfer: '्'
   half_charset: ${Img2Vec.half_character_classes}
-  train_dir: /home/rohitn/D1/HindiGlyphSynth/glyph_train_complete_lmdb
-  val_dir: /home/rohitn/D1/HindiGlyphSynth/val_lmdb
-  false_sample_dir: /home/rohitn/D1/HindiGlyphSynth/coco
-  false_train_wt: 3
-  false_val_wt: 1
+  train_dir: /work/rohitn/hindi_glyph_train_lmdb
+  val_dir: /work/rohitn/hindi_glyph_val_lmdb
+  false_sample_dir: /work/rohitn/coco
+  false_train_wt: 2
+  false_val_wt: 0
   test_dir: null
   delimiter: "\t"
-  batch_size: 32
+  batch_size: 64
   num_workers: 8
 
 csv_logger:
   _target_: lightning.pytorch.loggers.CSVLogger
   save_dir: /global/D1/homes/rohitn/Hindi_embed_logs # Do not put "/" at the end
-  name: Img2Vec_${backbone}_r1024
+  name: Img2Vec_${backbone}_r${Img2Vec.rep_dim}
   version: ${oc.env:SLURM_JOB_ID} # using SLURM Job Id which is obtained in the train script
   # version: 82574/train2 # specify a sub-folder if continuing training
 
@@ -127,11 +126,11 @@ training:
   accelerator: gpu # options are cpu or gpu
   strategy: ddp # only use when gpu is available
   devices: 2
-  max_epochs: 20
+  max_epochs: 10
   check_val_every_n_epoch: 1
   gradient_clip_val: 10
   precision: 32-true
-  log_every_n_steps: 5
+  log_every_n_steps: 100
   num_nodes: 1
 
 hydra:
