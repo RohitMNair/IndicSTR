@@ -1,6 +1,6 @@
 _target_: model.PosVisNet.net.FocalPosVisNet
-hidden_sizes: [128, 256, 512, 1024] # FocalNet Base
-embed_dim: 96
+# hidden_sizes: [128, 256, 512, 1024] # FocalNet Base
+embed_dim: 128 # each stage will have dim embed_dim * (2 ** stage_no) with stage_no starting with 0
 depths: [2, 2, 18, 2]
 focal_levels: [3, 3, 3, 3]
 focal_windows: [3, 3, 3, 3]
@@ -13,8 +13,8 @@ layer_norm_eps: 1.0e-12
 image_size: 128 
 patch_size: 4
 num_channels: 3
-num_decoder_layers: 1
-num_attention_heads: 12
+num_decoder_layers: 2
+num_attention_heads: 16
 qkv_bias: True
 max_grps: 25
 threshold: 0.5

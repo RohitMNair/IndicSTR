@@ -35,3 +35,21 @@ class FocalNetEncoder(pl.LightningModule):
 
     def forward(self, x):
         return self.model(x, return_dict = True).last_hidden_state
+
+
+if __name__ == '__main__':
+    model = FocalNetEncoder(
+        hidden_dropout_prob = 0.1, 
+        initializer_range = 0.02,
+        image_size= 128,
+        patch_size= 8,
+        num_channels = 3,
+        embed_dim= 128,
+        depths= [1, 1, 1, 1],
+        focal_levels = [3, 3, 3, 3],
+        focal_windows = [3, 3, 3, 3],
+        mlp_ratio = 4.0,
+        drop_path_rate = 0.1,
+        layer_norm_eps = 1e-5
+    )
+    print(model.config.hidden_sizes)

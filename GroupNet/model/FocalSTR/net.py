@@ -18,8 +18,7 @@ class FocalSTR(pl.LightningModule):
     Group implementation of ViTSTR but instead of ViT, we use FocalNet
     """
     def __init__(self, half_character_classes:list, full_character_classes:list,
-                 diacritic_classes:list, halfer:str, hidden_sizes: list = [192, 384, 768, 768],
-                 embed_dim: int = 96, depths:list= [2, 2, 6, 2],
+                 diacritic_classes:list, halfer:str, embed_dim: int = 96, depths:list= [2, 2, 6, 2],
                  focal_levels:list= [2, 2, 2, 2], focal_windows:list= [3, 3, 3, 3],
                  mlp_ratio: float= 4.0, hidden_dropout_prob: float = 0.0,
                  drop_path_rate:float = 0.1, initializer_range: float = 0.02, 
@@ -28,9 +27,9 @@ class FocalSTR(pl.LightningModule):
                  learning_rate: float= 1e-4, weight_decay: float= 1.0e-4, warmup_pct:float= 0.3):
         super().__init__()
         self.save_hyperparameters()
-        self.hidden_sizes = hidden_sizes
         self.embed_dim = embed_dim
         self.depths = depths
+        self.hidden_sizes = [self.embed_dim * (2 ** i) for i in range(len(depths))]
         self.focal_levels = focal_levels
         self.focal_windows = focal_windows
         self.mlp_ratio = mlp_ratio

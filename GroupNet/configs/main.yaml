@@ -35,14 +35,14 @@ full_character_classes: ['अ', 'आ', 'इ', 'ई', 'उ',
 diacritic_classes: ['ा','ि','ी','ु','ू','ृ', 'े','ै', 'ो', 'ौ', 'ॅ', 'ॉ', 'ँ','ं', 'ः', '़'] # ensure that halfer is not in this 
 halfer: '्'
 
-log_dir: /global/D1/homes/rohitn/GrpNet_logs
-name: vitstr_train_pretrain_w_glyphs
+log_dir: /home/rohitn/D1/GrpNet_logs/new
+name: FocalPosVisNet
 # using SLURM Job Id which is obtained in the train script
-# version: ${oc.env:SLURM_JOB_ID} 
+version: ${oc.env:SLURM_JOB_ID} 
 # specify a sub-folder if continuing training; log path will be: log_dir/name/version
-version: ViTSTR_128951/train_on_hori_${oc.env:SLURM_JOB_ID}_re
-ckpt_path: /home/rohitn/D1/GrpNet_logs/vitstr_train_pretrain_w_glyphs/ViTSTR_128951/checkpoints/epoch=5-val_loss=0.13-val_wrr2=0.81.ckpt
-restart_training: true # if training state needs a fresh start
+# version: ViTSTR_128951/train_on_hori_${oc.env:SLURM_JOB_ID}_re
+ckpt_path: null
+restart_training: false # if training state needs a fresh start
 
 model_load: # this won't be used if restart_training is false
   # _target_: model.FocalSTR.net.FocalSTR.load_from_checkpoint
@@ -50,7 +50,7 @@ model_load: # this won't be used if restart_training is false
   checkpoint_path: ${ckpt_path}
 
 defaults: # this wont be used if restart_training is true
-  - model: ViTSTR # Options are FocalSTR, ViTSTR, GrpNet
+  - model: FocalPosVisNet # Options are FocalSTR, ViTSTR, GrpNet
   - _self_
 
 model:
@@ -60,13 +60,13 @@ model:
   halfer: ${halfer}
 
 transforms:
-  rotation: 90
+  rotation: 60
   img_size: ${img_size}
   
 datamodule:
   _target_: data.module.LMDBHindiDataModule
-  train_dir: /home/rohitn/D1/HindiGlyphSynth/hindi_synth_lmdb
-  val_dir: /home/rohitn/D1/HindiGlyphSynth/hindi_synth_val_lmdb
+  train_dir: /home/rohitn/D1/HindiSynth/hindi_train_merged_lmdb
+  val_dir: /home/rohitn/D1/HindiSynth/hindi_val_merged_lmdb
   # train_dir: /home/rohitn/D1/HindiGlyphSynth/hindi_vertical_synth_lmdb
   # val_dir: /home/rohitn/D1/HindiGlyphSynth/hindi_vertical_synth_val_lmdb
   test_dir: null
@@ -104,7 +104,7 @@ training:
   accelerator: gpu # options are cpu or gpu
   strategy: ddp # only use when gpu is available
   devices: 2
-  max_epochs: 8
+  max_epochs: 10
   # max_steps: 1000
   check_val_every_n_epoch: 1
   gradient_clip_val: 10

@@ -492,9 +492,9 @@ class FocalPosVisNet(pl.LightningModule):
     visual representations of the encoder (ViT) and decodes characters
     """
     def __init__(self, half_character_classes:list, full_character_classes:list,
-                 diacritic_classes:list, halfer:str, hidden_sizes: list = [192, 384, 768, 768],
-                 embed_dim: int = 96, depths:list= [2, 2, 6, 2], focal_levels:list= [2, 2, 2, 2], 
-                 focal_windows:list= [3, 3, 3, 3], drop_path_rate:float= 0.1, mlp_ratio: float= 4.0, 
+                 diacritic_classes:list, halfer:str, embed_dim: int = 96, depths:list= [2, 2, 6, 2],
+                 focal_levels:list= [2, 2, 2, 2], focal_windows:list= [3, 3, 3, 3], 
+                 drop_path_rate:float= 0.1, mlp_ratio: float= 4.0, 
                  hidden_dropout_prob: float = 0.0, attention_probs_dropout_prob: float = 0.0, 
                  initializer_range: float = 0.02, layer_norm_eps: float = 1e-12, image_size: int = 224, 
                  patch_size: int = 16, num_channels: int = 3,  num_decoder_layers: int= 1, num_attention_heads:int= 12, 
@@ -508,7 +508,6 @@ class FocalPosVisNet(pl.LightningModule):
         - full_character_classes (list(str)): list of full character
         - diacritic_classes (list(str)): list of diacritic
         - halfer (str): the halfer character
-        - hidden_sizes (list(int), default= [192, 384, 768, 768]): Dimensionality (hidden size) at each stage.
         - embed_dim (int, default= 96): Dimensionality of patch embedding.
         - depths (list(int), default= [2, 2, 6, 2]): Depth (number of layers) of each stage in the encoder.
         - focal_levels (list(int), default= [2, 2, 2, 2]): Number of focal levels in each layer of the respective stages in the encoder.
@@ -536,7 +535,7 @@ class FocalPosVisNet(pl.LightningModule):
         self.save_hyperparameters()
         self.embed_dim = embed_dim
         self.depths = depths
-        self.hidden_sizes = hidden_sizes
+        self.hidden_sizes = [self.embed_dim * (2 ** i) for i in range(len(depths))]
         self.focal_levels = focal_levels
         self.focal_windows = focal_windows
         self.mlp_ratio = mlp_ratio
@@ -569,12 +568,11 @@ class FocalPosVisNet(pl.LightningModule):
             threshold= threshold,
             max_grps= self.max_grps
         ) 
-        
-        self.intermediate_size = int(self.mlp_ratio * self.hidden_size)
-        
+                
         self.num_h_c_classes = len(self.tokenizer.h_c_classes)
         self.num_f_c_classes = len(self.tokenizer.f_c_classes)
         self.num_d_classes =  len(self.tokenizer.d_classes)
+        
         self.encoder = FocalNetEncoder(
             hidden_dropout_prob= self.hidden_dropout_prob, 
             initializer_range = self.initializer_range,
@@ -591,7 +589,7 @@ class FocalPosVisNet(pl.LightningModule):
             layer_norm_eps= self.layer_norm_eps,
         )
         self.decoder = nn.Sequential(*[PosVisDecoder(
-                                            hidden_size= self.hidden_size,
+                                            hidden_size= self.hidden_sizes[-1],
                                             mlp_ratio= self.mlp_ratio,
                                             layer_norm_eps= self.layer_norm_eps,
                                             max_grps= self.max_grps,
@@ -600,19 +598,9 @@ class FocalPosVisNet(pl.LightningModule):
                                             attention_probs_dropout_prob= self.attention_probs_dropout_prob,
                                             qkv_bias= self.qkv_bias)
                                         for i in range(self.num_decoder_layers)])
-        self.decoder = PosVisDecoder(
-            hidden_size= self.hidden_size,
-            mlp_ratio= self.mlp_ratio,
-            layer_norm_eps= self.layer_norm_eps,
-            max_grps= self.max_grps,
-            num_heads= self.num_attention_heads,
-            hidden_dropout_prob= self.hidden_dropout_prob,
-            attention_probs_dropout_prob= self.attention_probs_dropout_prob,
-            qkv_bias= self.qkv_bias
-        )
 
         self.classifier = GrpClassifier(
-            hidden_size= self.hidden_size,
+            hidden_size= self.hidden_sizes[-1],
             num_half_character_classes= self.num_h_c_classes,
             num_full_character_classes= self.num_f_c_classes,
             num_diacritic_classes= self.num_d_classes,

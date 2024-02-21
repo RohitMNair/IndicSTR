@@ -43,7 +43,6 @@ class PosVisDecoder(pl.LightningModule):
                                             batch_first= True,
                                         )
         self.hidden_dropout2 = nn.Dropout(self.hidden_dropout_prob)
-        self.q_norm = nn.LayerNorm(normalized_shape= self.hidden_size, eps=self.layer_norm_eps)
         self.mlp_norm = nn.LayerNorm(normalized_shape= self.hidden_size, eps= self.layer_norm_eps)
         self.mlp_1 = nn.Linear(self.hidden_size, self.intermediate_size, bias = True)
         self.act = nn.GELU()
