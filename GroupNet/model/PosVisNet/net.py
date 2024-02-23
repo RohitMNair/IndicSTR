@@ -293,7 +293,7 @@ class ViTPosVisNet(pl.LightningModule):
             h_c_2_targets[idx], h_c_1_targets[idx], f_c_targets[idx], d_targets[idx], n_grps[idx] = self.tokenizer.label_encoder(label, device= self.device)
             # print(f"The label:{label}; The Targets: {h_c_2_targets[idx]}\n{h_c_1_targets[idx]}\n{f_c_targets[idx]}\n{d_targets[idx]}\n{n_grps[idx]}\n\n")
 
-        (h_c_2_logits, h_c_1_logits, f_c_logits, d_logits) = self.forward(imgs)[0]
+        (h_c_2_logits, h_c_1_logits, f_c_logits, d_logits) = self.forward(imgs)
 
         # Get the flattened versions of the targets and the logits for grp level metrics
         ((flat_h_c_2_targets, flat_h_c_1_targets, flat_f_c_targets, flat_d_targets), 
@@ -361,7 +361,7 @@ class ViTPosVisNet(pl.LightningModule):
         for idx,label in enumerate(labels, start= 0):
             h_c_2_targets[idx], h_c_1_targets[idx], f_c_targets[idx], d_targets[idx], n_grps[idx] = self.tokenizer.label_encoder(label, device= self.device)
 
-        (h_c_2_logits, h_c_1_logits, f_c_logits, d_logits) = self.forward(imgs)[0]
+        (h_c_2_logits, h_c_1_logits, f_c_logits, d_logits) = self.forward(imgs)
 
         # Get the flattened versions of the targets and the logits for grp level metrics
         ((flat_h_c_2_targets, flat_h_c_1_targets, flat_f_c_targets, flat_d_targets), 
@@ -421,7 +421,7 @@ class ViTPosVisNet(pl.LightningModule):
         for idx,label in enumerate(labels, start= 0):
             h_c_2_targets[idx], h_c_1_targets[idx], f_c_targets[idx], d_targets[idx], n_grps[idx] = self.tokenizer.label_encoder(label, device= self.device)
 
-        (h_c_2_logits, h_c_1_logits, f_c_logits, d_logits) = self.forward(imgs)[0]
+        (h_c_2_logits, h_c_1_logits, f_c_logits, d_logits) = self.forward(imgs)
 
         # Get the flattened versions of the targets and the logits for grp level metrics
         ((flat_h_c_2_targets, flat_h_c_1_targets, flat_f_c_targets, flat_d_targets), 
@@ -481,7 +481,7 @@ class ViTPosVisNet(pl.LightningModule):
                                                         character logits in order Half-char 2, Half-char 1, full-char
                                                         and diacritics
         """
-        (h_c_2_logits, h_c_1_logits, f_c_logits, d_logits) = self.forward(batch)[0]
+        (h_c_2_logits, h_c_1_logits, f_c_logits, d_logits) = self.forward(batch)
         pred_labels = self.tokenizer.decode((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits))
         return pred_labels, (h_c_2_logits, h_c_1_logits, f_c_logits, d_logits)
 
@@ -654,10 +654,10 @@ class FocalPosVisNet(pl.LightningModule):
                                             in order Half-char 2, Half-char 1, Full-char & diacritics
                                             2nd element is the position visual attention scores
         """
-        enc_x = self.encoder(x)
-        dec_x, pos_vis_attn_weights = self.decoder(enc_x)
-        h_c_2_logits, h_c_1_logits, f_c_logits, d_logits = self.classifier(dec_x)
-        return ((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits), (pos_vis_attn_weights))
+        x = self.encoder(x)
+        x = self.decoder(x)
+        h_c_2_logits, h_c_1_logits, f_c_logits, d_logits = self.classifier(x)
+        return (h_c_2_logits, h_c_1_logits, f_c_logits, d_logits)
 
     def _log_tb_images(self, viz_batch:Tensor, pred_labels:tuple, gt_labels:tuple, mode:str= "test") -> None:
         """
@@ -763,7 +763,7 @@ class FocalPosVisNet(pl.LightningModule):
             h_c_2_targets[idx], h_c_1_targets[idx], f_c_targets[idx], d_targets[idx], n_grps[idx] = self.tokenizer.label_encoder(label, device= self.device)
             # print(f"The label:{label}; The Targets: {h_c_2_targets[idx]}\n{h_c_1_targets[idx]}\n{f_c_targets[idx]}\n{d_targets[idx]}\n{n_grps[idx]}\n\n")
 
-        (h_c_2_logits, h_c_1_logits, f_c_logits, d_logits) = self.forward(imgs)[0]
+        (h_c_2_logits, h_c_1_logits, f_c_logits, d_logits) = self.forward(imgs)
 
         # Get the flattened versions of the targets and the logits for grp level metrics
         ((flat_h_c_2_targets, flat_h_c_1_targets, flat_f_c_targets, flat_d_targets), 
@@ -831,7 +831,7 @@ class FocalPosVisNet(pl.LightningModule):
         for idx,label in enumerate(labels, start= 0):
             h_c_2_targets[idx], h_c_1_targets[idx], f_c_targets[idx], d_targets[idx], n_grps[idx] = self.tokenizer.label_encoder(label, device= self.device)
 
-        (h_c_2_logits, h_c_1_logits, f_c_logits, d_logits) = self.forward(imgs)[0]
+        (h_c_2_logits, h_c_1_logits, f_c_logits, d_logits) = self.forward(imgs)
 
         # Get the flattened versions of the targets and the logits for grp level metrics
         ((flat_h_c_2_targets, flat_h_c_1_targets, flat_f_c_targets, flat_d_targets), 
@@ -891,7 +891,7 @@ class FocalPosVisNet(pl.LightningModule):
         for idx,label in enumerate(labels, start= 0):
             h_c_2_targets[idx], h_c_1_targets[idx], f_c_targets[idx], d_targets[idx], n_grps[idx] = self.tokenizer.label_encoder(label, device= self.device)
 
-        (h_c_2_logits, h_c_1_logits, f_c_logits, d_logits) = self.forward(imgs)[0]
+        (h_c_2_logits, h_c_1_logits, f_c_logits, d_logits) = self.forward(imgs)
 
         # Get the flattened versions of the targets and the logits for grp level metrics
         ((flat_h_c_2_targets, flat_h_c_1_targets, flat_f_c_targets, flat_d_targets), 
@@ -951,6 +951,6 @@ class FocalPosVisNet(pl.LightningModule):
                                                         character logits in order Half-char 2, Half-char 1, full-char
                                                         and diacritics
         """
-        (h_c_2_logits, h_c_1_logits, f_c_logits, d_logits) = self.forward(batch)[0]
+        (h_c_2_logits, h_c_1_logits, f_c_logits, d_logits) = self.forward(batch)
         pred_labels = self.tokenizer.decode((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits))
         return pred_labels, (h_c_2_logits, h_c_1_logits, f_c_logits, d_logits)

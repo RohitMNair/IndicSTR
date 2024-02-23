@@ -13,7 +13,7 @@ layer_norm_eps: 1.0e-12
 image_size: 128 
 patch_size: 4
 num_channels: 3
-num_decoder_layers: 2
+num_decoder_layers: 1
 num_attention_heads: 16
 qkv_bias: True
 max_grps: 25

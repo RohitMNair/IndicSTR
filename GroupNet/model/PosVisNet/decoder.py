@@ -73,3 +73,4 @@ class PosVisDecoder(pl.LightningModule):
         x = x + self.hidden_dropout4(x_1)
         
         return x_1, pos_vis_attn_weights
+        # return x_1
