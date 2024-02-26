@@ -1,16 +1,16 @@
 dataset_name: IndicSTR12_${oc.env:SLURM_JOB_ID}
-ckpt_root: /home/rohitn/D1/GrpNet_logs/vitstr_train_pretrain_w_glyphs/FocalSTR_129169/train_on_hori_129905_re/checkpoints # do not keep a trailing "/"
-ckpt_filename: epoch=5-val_loss=0.17-val_wrr2=0.79.ckpt
+ckpt_root: /home/rohitn/D1/GrpNet_logs/new/ViTSTR/135288/checkpoints # do not keep a trailing "/"
+ckpt_filename: epoch=7-val_loss=0.15-val_wrr2=0.84.ckpt
 
 model:
-  _target_: model.FocalSTR.net.FocalSTR.load_from_checkpoint
-  # _target_: model.ViTSTR.net.ViTSTR.load_from_checkpoint
+  # _target_: model.FocalSTR.net.FocalSTR.load_from_checkpoint
+  _target_: model.ViTSTR.net.ViTSTR.load_from_checkpoint
   # _target_: model.GrpNet.net.GroupNet.load_from_checkpoint
   checkpoint_path: ${ckpt_root}/${ckpt_filename}
   
 datamodule:
   _target_: data.module.LMDBHindiDataModule
-  test_dir: /home/rohitn/D1/indicstr12/hindi_lmdb
+  test_dir: /home/rohitn/D1/indicstr12/hindi_lmdb_fixed
   batch_size: 64 
   num_workers: 8
   drop_last: false
@@ -29,7 +29,7 @@ tensorboard_logger:
 
 training:
   _target_: lightning.pytorch.Trainer
-  accelerator: gpu # options are cpu or gpu
+  accelerator: cpu # options are cpu or gpu
   precision: 32-true
   log_every_n_steps: 100
   num_nodes: 1

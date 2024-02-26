@@ -267,7 +267,7 @@ class FocalSTR(pl.LightningModule):
             "train_wrr2_step": self.train_wrr2,
             "train_grp_acc_step": self.train_grp_acc,
         }
-        self.log_dict(log_dict_step, on_step = True, on_epoch = False, prog_bar = True, logger = True, sync_dist=True)
+        self.log_dict(log_dict_step, on_step = True, on_epoch = False, prog_bar = True, logger = True, sync_dist=True, batch_size= batch_size)
 
         # On epoch only logs
         log_dict_epoch = {
@@ -280,7 +280,7 @@ class FocalSTR(pl.LightningModule):
             "train_wrr2_epoch": self.train_wrr2, 
             "train_grp_acc_epoch": self.train_grp_acc,
         }
-        self.log_dict(log_dict_epoch, on_step = False, on_epoch = True, prog_bar = False, logger = True, sync_dist = True)  
+        self.log_dict(log_dict_epoch, on_step = False, on_epoch = True, prog_bar = False, logger = True, sync_dist = True, batch_size= batch_size)  
 
         return loss
 
@@ -342,7 +342,7 @@ class FocalSTR(pl.LightningModule):
             "val_wrr2": self.val_wrr2, 
             "val_grp_acc": self.val_grp_acc,
         }
-        self.log_dict(log_dict_epoch, on_step = False, on_epoch = True, prog_bar = False, logger = True, sync_dist = True)
+        self.log_dict(log_dict_epoch, on_step = False, on_epoch = True, prog_bar = False, logger = True, sync_dist = True, batch_size= batch_size)
 
     def test_step(self, batch, batch_no)-> None:
         # batch: img (BS x C x H x W), label (BS)
@@ -405,7 +405,7 @@ class FocalSTR(pl.LightningModule):
             "test_grp_acc": self.test_grp_acc,
             "NED": self.ned,
         }
-        self.log_dict(log_dict_epoch, on_step = False, on_epoch = True, prog_bar = False, logger = True, sync_dist = True)
+        self.log_dict(log_dict_epoch, on_step = False, on_epoch = True, prog_bar = False, logger = True, sync_dist = True, batch_size= batch_size)
 
     def predict_step(self, batch):
         (h_c_2_logits, h_c_1_logits, f_c_logits, d_logits) = self.forward(batch)
