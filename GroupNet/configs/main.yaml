@@ -36,11 +36,11 @@ diacritic_classes: ['ा','ि','ी','ु','ू','ृ', 'े','ै', 'ो', '�
 halfer: '्'
 
 log_dir: /home/rohitn/D1/GrpNet_logs/new
-name: FocalGrpNet
+name: FocalPosVisNet
 # using SLURM Job Id which is obtained in the train script
 version: ${oc.env:SLURM_JOB_ID}
 # specify a sub-folder if continuing training; log path will be: log_dir/name/version
-# version: ViTSTR_128951/train_on_hori_${oc.env:SLURM_JOB_ID}_re
+# version: FocalPosVisNet/135399/${oc.env:SLURM_JOB_ID}_co
 ckpt_path: null
 restart_training: false # if training state needs a fresh start
 
@@ -50,7 +50,7 @@ model_load: # this won't be used if restart_training is false
   checkpoint_path: ${ckpt_path}
 
 defaults: # this wont be used if restart_training is true
-  - model: FocalGrpNet # Options are FocalSTR, ViTSTR, GrpNet, FocalPosVisNet, FocalGrpNet
+  - model: ViTSTR # Options are FocalSTR, ViTSTR, GrpNet, FocalPosVisNet, FocalGrpNet
   - _self_
 
 model:
