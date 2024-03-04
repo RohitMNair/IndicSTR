@@ -121,40 +121,6 @@ class CharGroupMHA(pl.LightningModule):
         context = self.out_proj(context)
         return context, (attention_probs_h_c_2, attention_probs_h_c_1, attention_probs_f_c, attention_probs_d)
     
-# class GrpMHA(pl.LightningModule):
-#     def __init__(self, hidden_size: int, full_character_embeddings:Tensor,
-#                 half_character_2_embeddings:Tensor, half_character_1_embeddings:Tensor, 
-#                 diacritics_embeddigs:Tensor, num_heads: int, char_embed_dim:int, dropout:float= 0.0):
-#         super().__init__()
-#         self.dropout = dropout
-#         self.hidden_size = hidden_size
-#         self.f_c_emb = full_character_embeddings
-#         self.h_c_2_emb = half_character_2_embeddings
-#         self.h_c_1_emb = half_character_1_embeddings
-#         self.d_emb = diacritics_embeddigs
-#         self.char_embed_dim = char_embed_dim
-#         self.combined_emb = nn.Parameter(torch.cat([self.h_c_2_emb, self.h_c_1_emb, self.f_c_emb, self.d_emb], dim= 0))
-#         self.num_heads = num_heads
-#         self.grp_attn = nn.MultiheadAttention(
-#                                             embed_dim= self.hidden_size, 
-#                                             kdim= self.char_embed_dim,
-#                                             vdim= self.char_embed_dim,
-#                                             num_heads= self.num_heads, 
-#                                             dropout= self.dropout, 
-#                                             add_bias_kv= True,
-#                                             batch_first= True,
-#                                         )
-    
-#     def forward(self, x:Tensor):
-#         self.combined_emb = self.combined_emb.to(self.device)
-#         x, attn_weights = self.grp_attn(
-#                                         query= x,
-#                                         key= self.combined_emb.expand(x.shape[0], -1, -1),
-#                                         value= self.combined_emb.expand(x.shape[0], -1, -1),
-#                                     )
-#         return x, attn_weights
-
-
 class GroupDecoder(pl.LightningModule):
     """
     Group Decoder which decodes characters based on similarity with the group embeddings taken from the Img2Vec model
@@ -214,16 +180,7 @@ class GroupDecoder(pl.LightningModule):
                                         dropout = self.attention_probs_dropout_prob,
                                         qkv_bias = self.qkv_bias
                                     )
-        # self.chr_grp_mha = GrpMHA(
-        #                         hidden_size = self.hidden_size, 
-        #                         full_character_embeddings= self.f_c_emb,
-        #                         half_character_1_embeddings= self.h_c_1_emb,
-        #                         half_character_2_embeddings= self.h_c_2_emb,
-        #                         diacritics_embeddigs= self.d_emb,
-        #                         char_embed_dim= self.char_embed_dim,
-        #                         dropout = self.attention_probs_dropout_prob,
-        #                         num_heads= self.num_heads,
-        # )
+
         self.hidden_dropout3 = nn.Dropout(self.hidden_dropout_prob)
         self.mlp_norm = nn.LayerNorm(normalized_shape= self.hidden_size, eps= self.layer_norm_eps)
         self.mlp_1 = nn.Linear(self.hidden_size, self.intermediate_size, bias = True)

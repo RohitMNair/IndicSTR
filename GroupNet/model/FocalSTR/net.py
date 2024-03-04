@@ -153,16 +153,16 @@ class FocalSTR(pl.LightningModule):
             tb_logger.add_image(f"{mode}/{self.global_step}_pred-{pred_labels[img_idx]}_gt-{gt_labels[img_idx]}", viz_batch[img_idx], 0)
     
     def configure_optimizers(self)-> dict:
-        optmizer = AdamW(params= self.parameters(), lr= self.lr, weight_decay= self.weight_decay)
+        optimizer = AdamW(params= self.parameters(), lr= self.lr, weight_decay= self.weight_decay)
         lr_scheduler = OneCycleLR(
-            optimizer= optmizer,
+            optimizer= optimizer,
             max_lr= self.lr,
             total_steps= int(self.trainer.estimated_stepping_batches), # gets the max training steps
             pct_start= self.pct_start,
             cycle_momentum= False,
         )
         return {
-            'optimizer': optmizer,
+            'optimizer': optimizer,
             'lr_scheduler': {
                 'scheduler': lr_scheduler,
                 'interval': 'step',

@@ -1,18 +1,18 @@
-backbone: resnet
+backbone: focalnet
 # ckpt_path: /home/rohitn/D1/Hindi_embed_logs/Img2Vec_resnet_50_r512/82574/train1/checkpoints/epoch=12-val_loss=0.24-val_acc=0.84.ckpt
 ckpt_path: null
 img_size: 128
 
 defaults: 
-  - model: resnet
+  - model: focalnet
   - _self_
 
-model: # for resnet
-  img_size: ${img_size}
+# model: # for resnet
+#   img_size: ${img_size}
 
-# model: # for focalnet
-#   config:
-#     image_size: ${img_size}
+model: # for focalnet
+  config:
+    image_size: ${img_size}
 
 Img2Vec:
   _target_: model.Img2Vec.Img2Vec
@@ -43,6 +43,7 @@ Img2Vec:
     _partial_: true
     _target_: torch.optim.AdamW
   lr: 1.0e-4
+  pct_start: 0.3
   weight_decay: 0.0
   threshold: 0.5
   backbone: ${model}
@@ -80,10 +81,10 @@ datamodule:
   diacritics: ${Img2Vec.diacritic_classes}
   halfer: '्'
   half_charset: ${Img2Vec.half_character_classes}
-  train_dir: /work/rohitn/hindi_glyph_train_lmdb
-  val_dir: /work/rohitn/hindi_glyph_val_lmdb
-  false_sample_dir: /work/rohitn/coco
-  false_train_wt: 2
+  train_dir: /home/rohitn/D1/HindiSynth/hindi_glyph_train_lmdb
+  val_dir: /home/rohitn/D1/HindiSynth/hindi_glyph_val_lmdb
+  false_sample_dir: null
+  false_train_wt: 0
   false_val_wt: 0
   test_dir: null
   delimiter: "\t"

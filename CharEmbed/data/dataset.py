@@ -54,15 +54,15 @@ class DevanagariDataset(Dataset):
             self.gt_file = pd.concat([self.gt_file] + self.false_weight*[self.false_samples], axis = 0) # concat the dfs
             self.gt_file = self.gt_file.sample(frac = 1).reset_index(drop = True) # shuffle the df
 
-        # dict with class indexes as keys and characters as values
-        self.char_label_map = {k:c for k,c in enumerate(self.characters, start = 1)}
+        # dict with class indexes as keys and characters as values, blank not needed as FC must be present
+        self.char_label_map = {k:c for k,c in enumerate(self.characters, start = 0)}
         # blank not needed for embedding as it is Binary classification of each diacritic
         self.diacritic_label_map = {k:c for k,c in enumerate(self.diacritics, start = 0)}
         # 0 will be reserved for blank
         self.half_char_label_map = {k:c for k,c in enumerate(self.half_characters, start = 1)}
 
         # dict with characters as keys and class indexes as values
-        self.rev_char_label_map = {c:k for k,c in enumerate(self.characters, start = 1)}
+        self.rev_char_label_map = {c:k for k,c in enumerate(self.characters, start = 0)}
         self.rev_diacritirc_label_map = {c:k for k,c in enumerate(self.diacritics, start = 0)}
         self.rev_half_char_label_map = {c:k for k,c in enumerate(self.half_characters, start = 1)}
         print("Class Maps",self.char_label_map, self.diacritic_label_map, self.half_char_label_map, self.halfer, flush = True)
@@ -90,7 +90,7 @@ class DevanagariDataset(Dataset):
         
         
         # get the character groupings
-        character, half_character1, half_character2, diacritic = 0, 0, 0, torch.tensor([0. for i in range(len(self.diacritics))])
+        character, half_character1, half_character2, diacritic = -1, 0, 0, torch.tensor([0. for i in range(len(self.diacritics))])
         for i, char in enumerate(label):
             halfer_cntr = 0
             if char in self.half_charset and i + 1 < len(label) and label[i+1] == self.halfer:
@@ -107,7 +107,7 @@ class DevanagariDataset(Dataset):
                         half_character1 = self.rev_half_char_label_map[char]
 
             elif char in self.charset:
-                assert character == 0,\
+                assert character == -1,\
                        f"2 full Characters have occured {label}-{char}-{character}-{half_character1}-{half_character2}"
                 character = self.rev_char_label_map[char]
 
@@ -126,6 +126,7 @@ class DevanagariDataset(Dataset):
                 raise Exception(f"Character {char} not found in vocabulary")
         
         assert torch.sum(diacritic, dim = -1) <= 2, f"More than 2 diacritics occured {label}-{diacritic}"
+        assert character != -1, f"No full character occured {label}"
 
         return img, half_character2, half_character1, character, diacritic
                        
@@ -169,14 +170,14 @@ class LMDBDevanagariDataset(Dataset):
 
         
         # dict with class indexes as keys and characters as values
-        self.char_label_map = {k:c for k,c in enumerate(self.characters, start = 1)}
+        self.char_label_map = {k:c for k,c in enumerate(self.characters, start = 0)}
         # blank not needed for embedding as it is Binary classification of each diacritic
         self.diacritic_label_map = {k:c for k,c in enumerate(self.diacritics, start = 0)}
         # 0 will be reserved for blank
         self.half_char_label_map = {k:c for k,c in enumerate(self.half_characters, start = 1)}
 
         # dict with characters as keys and class indexes as values
-        self.rev_char_label_map = {c:k for k,c in enumerate(self.characters, start = 1)}
+        self.rev_char_label_map = {c:k for k,c in enumerate(self.characters, start = 0)}
         self.rev_diacritirc_label_map = {c:k for k,c in enumerate(self.diacritics, start = 0)}
         self.rev_half_char_label_map = {c:k for k,c in enumerate(self.half_characters, start = 1)}
         
@@ -265,7 +266,7 @@ class LMDBDevanagariDataset(Dataset):
             label = item[2]
         
         # get the character groupings
-        character, half_character1, half_character2, diacritic = 0, 0, 0, torch.tensor([0. for i in range(len(self.diacritics))])
+        character, half_character1, half_character2, diacritic = -1, 0, 0, torch.tensor([0. for i in range(len(self.diacritics))])
         for i, char in enumerate(label):
             halfer_cntr = 0
             if char in self.half_charset and i + 1 < len(label) and label[i+1] == self.halfer:
@@ -282,7 +283,7 @@ class LMDBDevanagariDataset(Dataset):
                         half_character1 = self.rev_half_char_label_map[char]
 
             elif char in self.charset:
-                assert character == 0,\
+                assert character == -1,\
                        f"2 full Characters have occured {label}-{char}-{character}-{half_character1}-{half_character2}"
                 character = self.rev_char_label_map[char]
 
@@ -299,7 +300,7 @@ class LMDBDevanagariDataset(Dataset):
 
             else:
                 raise Exception(f"Character {char} not found in vocabulary")
-        
+        assert character != -1, f"There are no full characters present in the group {label}"
         assert torch.sum(diacritic, dim = -1) <= 2, f"More than 2 diacritics occured {label}-{diacritic}"
         return img, half_character2, half_character1, character, diacritic
         

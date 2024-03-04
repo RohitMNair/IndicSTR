@@ -2,7 +2,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import lightning.pytorch as pl
+from typing import Union
 from utils.metrics import CharGrpAccuracy, DiacriticAccuracy, HalfCharacterAccuracy, CombinedHalfCharAccuracy, CharacterAccuracy
+from torch.optim.lr_scheduler import OneCycleLR
 
 class Img2Vec(pl.LightningModule):
     """
@@ -25,8 +27,8 @@ class Img2Vec(pl.LightningModule):
 
     """
     def __init__(self, character_classes: list, diacritic_classes: list, half_character_classes:list,
-                backbone:nn.Module or pl.LightningModule, optimizer = torch.optim.Adam, lr= 1e-3, threshold = 0.5, 
-                rep_dim = 2048, weight_decay = 0.01, activation = nn.ReLU()):
+                backbone:Union[nn.Module, pl.LightningModule], optimizer = torch.optim.Adam, lr= 1e-3, threshold = 0.5, 
+                rep_dim = 2048, weight_decay = 0.01, activation = nn.ReLU(), pct_start = 0.3):
         super().__init__()
         self.character_classes = character_classes # 54 + 10 + 9 + 27 also counting numbers vowels and chinh
         self.diacritic_classes = diacritic_classes
@@ -34,6 +36,7 @@ class Img2Vec(pl.LightningModule):
         self.rep_dim = rep_dim
         self.backbone = backbone
         self.activation = activation
+        self.pct_start = pct_start
         self.rep_layer = nn.Sequential(
                             self.activation,
                             nn.Linear(
@@ -152,11 +155,26 @@ class Img2Vec(pl.LightningModule):
         return loss
 
     def configure_optimizers(self):
-        return self.optimizer(
+        self.optimizer = self.optimizer(
             self.parameters(), 
             lr = self.lr,
             weight_decay = self.weight_decay
             )
+        lr_scheduler = OneCycleLR(
+            optimizer= self.optimizer,
+            max_lr= self.lr,
+            total_steps= int(self.trainer.estimated_stepping_batches), # gets the max training steps
+            pct_start= self.pct_start,
+            cycle_momentum= False,
+        )
+        return {
+            'optimizer': self.optimizer,
+            'lr_scheduler': {
+                'scheduler': lr_scheduler,
+                'interval': 'step',
+            }
+        }
+        
     
     def validation_step(self, batch, batch_no):
         x, half_char2, half_char1, char, diac = batch
