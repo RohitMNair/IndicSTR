@@ -136,19 +136,19 @@ class FocalGroupNet(BaseSystem):
                  drop_path_rate:float= 0.1, mlp_ratio: float= 4.0, 
                  hidden_dropout_prob: float = 0.0, attention_probs_dropout_prob: float = 0.0, 
                  initializer_range: float = 0.02, layer_norm_eps: float = 1e-12, image_size: int = 224, 
-                 patch_size: int = 16, num_channels: int = 3, qkv_bias: bool = True,
+                 patch_size: int = 4, num_channels: int = 3, qkv_bias: bool = True,
                  num_attention_heads:int= 12, max_grps: int = 25, threshold:float= 0.5,
                  learning_rate: float= 1e-4, weight_decay: float= 1.0e-4, warmup_pct:float= 0.3
                  ):
+        self.hidden_sizes = [self.embed_dim * (2 ** i) for i in range(len(depths))]
         super().__init__(half_character_classes= half_character_classes, full_character_classes= full_character_classes,
                          diacritic_classes= diacritic_classes, halfer= halfer, max_grps= max_grps,
-                         hidden_size= embed_dim * (2 ** (len(depths) - 1)), threshold= threshold,
+                         hidden_size= self.hidden_sizes[-1], threshold= threshold,
                          learning_rate= learning_rate, weight_decay= weight_decay, warmup_pct= warmup_pct)
         self.save_hyperparameters()
         self.emb_path = emb_path
         self.embed_dim = embed_dim
         self.depths = depths
-        self.hidden_sizes = [self.embed_dim * (2 ** i) for i in range(len(depths))]
         self.focal_levels = focal_levels
         self.focal_windows = focal_windows
         self.mlp_ratio = mlp_ratio

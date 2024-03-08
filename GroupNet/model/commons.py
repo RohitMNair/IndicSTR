@@ -94,7 +94,7 @@ class FixedGrpClassifier(pl.LightningModule):
         self.character_head = nn.Parameter(torch.permute(full_char_embeddings, (1, 0)), requires_grad= False)
         self.diacritic_head = nn.Parameter(torch.permute(diacritic_embeddings, (1, 0)), requires_grad= False)
         # to handle [PAD] & [EOS] we need additional trainable parameters
-        self.half_character2_special = nn.Linear(in_features = self.embed_size, out_features= 2) # we have BLANK in embeddings at 0th pos
+        self.half_character2_special = nn.Linear(in_features = self.embed_size, out_features= 2) # we have BLANK in embeddings at 0th pos of emb.
         self.half_character1_special = nn.Linear(in_features= self.embed_size, out_features= 2)
         self.character_special = nn.Linear(in_features= self.embed_size, out_features= 2)
         self.diacritic_special = nn.Linear(self.embed_size, out_features= 2)
@@ -114,6 +114,7 @@ class FixedGrpClassifier(pl.LightningModule):
         fc_special_logits = self.character_special(x)
         diac_special_logits = self.diacritic_special(x)
 
+        # 0th pos for [EOS], 1st pos for [PAD], 2nd for [BLANK]
         half_char2_logits = torch.cat([hc2_special_logits, half_char2_logits], dim= -1)
         half_char1_logts = torch.cat([hc1_special_logits, half_char1_logts], dim= -1)
         full_char_logits = torch.cat([fc_special_logits, full_char_logits], dim= -1)
