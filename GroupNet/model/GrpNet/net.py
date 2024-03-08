@@ -140,7 +140,7 @@ class FocalGroupNet(BaseSystem):
                  num_attention_heads:int= 12, max_grps: int = 25, threshold:float= 0.5,
                  learning_rate: float= 1e-4, weight_decay: float= 1.0e-4, warmup_pct:float= 0.3
                  ):
-        self.hidden_sizes = [self.embed_dim * (2 ** i) for i in range(len(depths))]
+        self.hidden_sizes = [embed_dim * (2 ** i) for i in range(len(depths))]
         super().__init__(half_character_classes= half_character_classes, full_character_classes= full_character_classes,
                          diacritic_classes= diacritic_classes, halfer= halfer, max_grps= max_grps,
                          hidden_size= self.hidden_sizes[-1], threshold= threshold,
