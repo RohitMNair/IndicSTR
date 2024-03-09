@@ -9,7 +9,7 @@ from torch import Tensor
 from torch.utils.data import Dataset
 from torchvision import transforms
 from typing import Tuple
-from .tokenizer import Tokenizer
+from .tokenizer import HindiTokenizer, MalayalamTokenizer
 
 class HindiLMDBDataset(Dataset):
     def __init__(self, data_dir: str, transforms: transforms.Compose,
@@ -21,7 +21,7 @@ class HindiLMDBDataset(Dataset):
         self.transforms = transforms
         self.items = []
         self.processed_indexes = []
-        self.tokenizer = Tokenizer(
+        self.tokenizer = HindiTokenizer(
             half_character_classes= half_character_classes,
             full_character_classes= full_character_classes,
             diacritic_classes= diacritic_classes,
@@ -61,7 +61,7 @@ class HindiLMDBDataset(Dataset):
                 if index % 100000 == 0:
                     print(f"Processed {index} number of labels", flush = True)
 
-                if len(self.tokenizer.hindi_label_transform(label)) == 0:
+                if len(self.tokenizer.label_transform(label)) == 0:
                     # The label is does not follow the group convention
                     continue
                 else:

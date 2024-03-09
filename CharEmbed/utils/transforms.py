@@ -1,5 +1,6 @@
 from torchvision import transforms
 import torch
+import math
 import numpy as np
 from pathlib import Path
 
@@ -8,7 +9,8 @@ class RescaleTransform(object):
 
     Args:
         output_size (tuple or int): Desired output size. If tuple, the greater image
-            dimension is matched to one of the output_size. If int, smaller of image edges is matched
+            dimension is matched to one of the output_size, and the other dimension
+            is adjusted to maintain the aspect ratio. If int, smaller of image edges is matched
             to output_size keeping aspect ratio the same.
     """
   def __init__(self, output_size):
@@ -21,15 +23,15 @@ class RescaleTransform(object):
         if isinstance(self.output_size, int):
             new_h, new_w = self.output_size, self.output_size
             if w > h:
-                new_h = int(new_w / aspect_ratio)
+                new_h = int(math.ceil(new_w / aspect_ratio))
             else:
-                new_w = int(new_h * aspect_ratio)
+                new_w = int(math.ceil(new_h * aspect_ratio))
         else:
             new_h, new_w = self.output_size
             if h > w:
-                new_w = int(new_h * aspect_ratio)
+                new_w = int(math.ceil(new_h * aspect_ratio))
             else:
-                new_h = int(new_w / aspect_ratio)
+                new_h = int(math.ceil(new_w / aspect_ratio))
 
         new_h, new_w = int(new_h), int(new_w)
         image = transforms.Resize((new_h, new_w), antialias=True)(image)

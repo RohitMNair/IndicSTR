@@ -51,7 +51,7 @@ class Img2Vec(pl.LightningModule):
         self.weight_decay = weight_decay
         self.character_head = nn.Linear(
                                 in_features = self.rep_dim,
-                                out_features = len(self.character_classes) + 1,
+                                out_features = len(self.character_classes),
                                 bias = False
                             )
         self.diacritic_head = nn.Linear( # multi-label classification hence no need for extra head

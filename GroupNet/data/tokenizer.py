@@ -1,18 +1,15 @@
 import torch.nn as nn
 import torch
 import unicodedata
+from abc import ABC, abstractmethod
 
 from typing import Tuple
 from torch import Tensor
 
-class Tokenizer:
-    """
-    Class for encoding and decoding labels
-    """
+class BaseTokenizer(ABC):
     BLANK = "[B]"
     EOS = "[E]"
     PAD = "[P]"
-
     def __init__(self, half_character_classes:list, full_character_classes:list, diacritic_classes:list,
                 halfer:str, threshold:float= 0.5, max_grps:int= 25):
         """
@@ -23,9 +20,9 @@ class Tokenizer:
         - halfer (str): diacritic used to represent a half-character
         - threshold (float): classification threshold (default: 0.5)
         """
-        self.h_c_classes = [Tokenizer.EOS, Tokenizer.PAD, Tokenizer.BLANK] + half_character_classes
-        self.f_c_classes = [Tokenizer.EOS, Tokenizer.PAD] + full_character_classes
-        self.d_classes = [Tokenizer.EOS, Tokenizer.PAD] + diacritic_classes       
+        self.h_c_classes = [BaseTokenizer.EOS, BaseTokenizer.PAD, BaseTokenizer.BLANK] + half_character_classes
+        self.f_c_classes = [BaseTokenizer.EOS, BaseTokenizer.PAD] + full_character_classes
+        self.d_classes = [BaseTokenizer.EOS, BaseTokenizer.PAD] + diacritic_classes       
         self.pad_id = 1
         self.eos_id = 0
         self.blank_id = 2
@@ -48,7 +45,7 @@ class Tokenizer:
         self.rev_h_c_label_map = {c:k for k,c in enumerate(self.h_c_classes, start = 0)}
         self.rev_f_c_label_map = {c:k for k,c in enumerate(self.f_c_classes, start = 0)}
         self.rev_d_label_map = {c:k for k,c in enumerate(self.d_classes, start= 0)}
-    
+
     def _normalize_charset(self)-> None:
         """
         Function to normalize the charset provided and converts the charset from list to tuple
@@ -56,7 +53,7 @@ class Tokenizer:
         self.h_c_classes = tuple([unicodedata.normalize("NFKD", c) for c in self.h_c_classes])
         self.f_c_classes = tuple([unicodedata.normalize("NFKD", c) for c in self.f_c_classes])
         self.d_classes = tuple([unicodedata.normalize("NFKD", c) for c in self.d_classes])
-
+    
     def _check_h_c(self, label:str, idx:int)-> bool:
         """
         Method to check if the character at index idx in label is a half-char or not
@@ -67,7 +64,7 @@ class Tokenizer:
         return idx < len(label) and label[idx] in self.h_c_set \
             and idx + 1 < len(label) and label[idx + 1] == self.halfer
 
-    def _check_f_c(self, label, idx):
+    def _check_f_c(self, label, idx)-> bool:
         """
         Method to check if the character at index idx in label is a full-char or not
         Returns:
@@ -78,7 +75,7 @@ class Tokenizer:
         return idx < len(label) and label[idx] in self.f_c_set \
             and (idx + 1 >= len(label) or label[idx + 1] != self.halfer)
 
-    def _check_d_c(self, label, idx):
+    def _check_d_c(self, label, idx)-> bool:
         """
         Function to check if the character at index idx in label is a diacritic or not
         Returns:
@@ -86,8 +83,71 @@ class Tokenizer:
         """
         # check if the char belongs in d_c_set
         return idx < len(label) and label[idx] in self.d_c_set
+
+    @abstractmethod
+    def grp_sanity(self, label:str, grps:tuple)-> bool:
+        """
+        Checks whether the groups are properly formed
+        """
+        pass
+
+    @abstractmethod
+    def label_transform(self, label:str)-> tuple:
+        """
+        Transform label into group
+        """
+        pass 
+
+    @abstractmethod
+    def grp_class_encoder(self, grp: str)-> tuple:
+        """
+        Encodes a group into tensors
+
+        Returns:
+        - tuple: Containing encodings of various components
+        """
+        pass
+
+    @abstractmethod
+    def label_encoder(self, label:str, device:torch.device)-> tuple:
+        """
+        Converts the text label into classes indexes for classification
+        Args:
+        - label (str): The label to be encoded
+        - device (torch.device): Device in which the encodings should be saved
+
+        Returns:
+        - tuple: tuple of tensors representing various character components in the group
+        """
+        pass
     
-    def hindi_grp_sanity(self, label:str, grps:tuple)-> bool:
+    @abstractmethod
+    def _decode_grp(self, **kwarts)-> str:
+        """
+        Method which takes in class predictions of a single group and decodes
+        the group
+        Returns:
+        - str: the group formed
+        """
+        pass
+
+    @abstractmethod          
+    def decode(self, logits:tuple)-> tuple:
+        """
+        Method to decode the labels of a batch given the logits
+        Args:-
+        - logits (tuple): the logits of the model in the order
+                                                        
+        Returns:
+        - tuple: the labels of each batch item
+        """
+        pass
+
+class HindiTokenizer(BaseTokenizer):
+    """
+    Class for encoding and decoding Hindi labels
+    """
+    def grp_sanity(self, label:str, grps:tuple)-> bool:
         """
         Checks whether the groups are properly formed
         for Hindi, each group should contain:
@@ -138,7 +198,7 @@ class Tokenizer:
 
         return True
 
-    def hindi_label_transform(self, label:str)-> tuple:
+    def label_transform(self, label:str)-> tuple:
         """
         Transform hindi labels into groups
         Args:
@@ -184,7 +244,7 @@ class Tokenizer:
             grps = grps + (running_grp, )
             running_grp = ""
 
-        return grps if self.hindi_grp_sanity(label, grps) else ()
+        return grps if self.grp_sanity(label, grps) else ()
 
     def grp_class_encoder(self, grp: str)-> Tuple[int, int, int, Tensor]:
         """
@@ -254,13 +314,14 @@ class Tokenizer:
         Converts the text label into classes indexes for classification
         Args:
         - label (str): The label to be encoded
+        - device (torch.device): Device in which the encodings should be saved
 
         Returns:
         - tuple(int, int, int, Tensor): half-char 2 class index, half-char 1
                                         class index, full char class index,
                                         diacritic one hot encoding
         """
-        grps = self.hindi_label_transform(label= label)
+        grps = self.label_transform(label= label)
         h_c_2_target, h_c_1_target, f_c_target, d_target = (
                                                             torch.full((self.max_grps,), self.pad_id, dtype= torch.long), 
                                                             torch.full((self.max_grps,), self.pad_id, dtype= torch.long),
@@ -302,15 +363,15 @@ class Tokenizer:
             "Diacritic preds and max must contain 2 elements for 2 diacritics"
         
         grp = ""
-        grp += self.h_c_label_map[int(h_c_2_pred.item())] + self.halfer if self.h_c_label_map[int(h_c_2_pred.item())] != Tokenizer.BLANK \
-            and self.h_c_label_map[int(h_c_2_pred.item())] != Tokenizer.PAD else ""
-        grp += self.h_c_label_map[int(h_c_1_pred.item())] + self.halfer if self.h_c_label_map[int(h_c_1_pred.item())] != Tokenizer.BLANK \
-            and self.h_c_label_map[int(h_c_1_pred.item())] != Tokenizer.PAD else ""
+        grp += self.h_c_label_map[int(h_c_2_pred.item())] + self.halfer if self.h_c_label_map[int(h_c_2_pred.item())] != HindiTokenizer.BLANK \
+            and self.h_c_label_map[int(h_c_2_pred.item())] != HindiTokenizer.PAD else ""
+        grp += self.h_c_label_map[int(h_c_1_pred.item())] + self.halfer if self.h_c_label_map[int(h_c_1_pred.item())] != HindiTokenizer.BLANK \
+            and self.h_c_label_map[int(h_c_1_pred.item())] != HindiTokenizer.PAD else ""
         grp += self.f_c_label_map[int(f_c_pred.item())]
         grp += self.d_c_label_map[int(d_pred[0].item())] if d_max[0] else ""
         grp += self.d_c_label_map[int(d_pred[1].item())] if d_max[1] else ""
                 
-        return grp.replace(Tokenizer.BLANK, "").replace(Tokenizer.PAD, "") # remove all [B], [P] occurences
+        return grp.replace(HindiTokenizer.BLANK, "").replace(HindiTokenizer.PAD, "") # remove all [B], [P] occurences
                 
     def decode(self, logits:Tuple[Tensor, Tensor, Tensor, Tensor])-> tuple:
         """
@@ -347,7 +408,7 @@ class Tokenizer:
                                 d_pred= d_preds[i,j],
                                 d_max= d_max[i,j]
                             )
-                if Tokenizer.EOS in grp:
+                if HindiTokenizer.EOS in grp:
                     break
                 else:
                     label += grp
@@ -357,51 +418,26 @@ class Tokenizer:
         
         return tuple(pred_labels)
 
-class MalayalamTokenizer:
+class MalayalamTokenizer(BaseTokenizer):
     """
     Class for encoding and decoding labels
     """
-    BLANK = "[B]"
-    EOS = "[E]"
-    PAD = "[P]"
-
-    def __init__(self, chill,special_matra,half_character_classes:list, full_character_classes:list, diacritic_classes:list,
+    def __init__(self, chill:list, special_matra:list, half_character_classes:list, full_character_classes:list, diacritic_classes:list,
                 halfer:str, threshold:float= 0.5, max_grps:int= 25):
         """
         Args:
+        - chill (list): chillaksharam list
+        - special_matra (list): special diacritics
         - half_character_set (list)
         - full_character_set (list)
         - diacritic_set (list)
         - halfer (str): diacritic used to represent a half-character
         - threshold (float): classification threshold (default: 0.5)
-        """
-        self.h_c_classes = [Tokenizer.EOS, Tokenizer.PAD, Tokenizer.BLANK] + half_character_classes
-        self.f_c_classes = [Tokenizer.EOS, Tokenizer.PAD] + full_character_classes
-        self.d_classes = [Tokenizer.EOS, Tokenizer.PAD] + diacritic_classes     
+        """     
+        super().__init__(half_character_classes= half_character_classes, full_character_classes= full_character_classes,
+                         diacritic_classes= diacritic_classes, halfer= halfer, threshold= threshold, max_grps= max_grps)
         self.chill= chill
-        self.special_matra=special_matra
-        self.pad_id = 1
-        self.eos_id = 0
-        self.blank_id = 2
-        self._normalize_charset()
-        self.h_c_set = set(self.h_c_classes)
-        self.f_c_set = set(self.f_c_classes)
-        self.d_c_set = set(self.d_classes)
-        self.halfer = halfer
-        self.thresh = threshold
-        self.max_grps = max_grps
-
-        # dict with class indexes as keys and characters as values
-        self.h_c_label_map = {k:c for k,c in enumerate(self.h_c_classes, start = 0)}
-        # 0 will be reserved for blank
-        self.f_c_label_map = {k:c for k,c in enumerate(self.f_c_classes, start = 0)}
-        # blank not needed for embedding as it is Binary classification of each diacritic
-        self.d_c_label_map = {k:c for k,c in enumerate(self.d_classes, start = 0)}
-        
-        # dict with characters as keys and class indexes as values
-        self.rev_h_c_label_map = {c:k for k,c in enumerate(self.h_c_classes, start = 0)}
-        self.rev_f_c_label_map = {c:k for k,c in enumerate(self.f_c_classes, start = 0)}
-        self.rev_d_label_map = {c:k for k,c in enumerate(self.d_classes, start= 0)}
+        self.special_matra= special_matra
     
     def _normalize_charset(self)-> None:
         """
@@ -418,7 +454,8 @@ class MalayalamTokenizer:
         - bool: True if the current index is a half character or not
         """
         # check if the current char is in h_c_set and next char is halfer
-        return idx < len(label) and label[idx] in self.h_c_set and idx + 1 < len(label) and label[idx + 1] == self.halfer
+        return idx < len(label) and label[idx] in self.h_c_set \
+                and idx + 1 < len(label) and label[idx + 1] == self.halfer
 
     def _check_f_c(self, label, idx):
         """
@@ -440,13 +477,13 @@ class MalayalamTokenizer:
         # check if the char belongs in d_c_set
         return idx < len(label) and label[idx] in self.d_c_set
     
-    def mal_grp_sanity(self, label:str, grps:tuple)-> bool:
+    def grp_sanity(self, label:str, grps:tuple)-> bool:
         """
         Checks whether the groups are properly formed
-        for Hindi, each group should contain:
-            1) at most 2 half-characters
+        for Malayalam, each group should contain:
+            1) at most 3 half-characters
             2) at most 2 diacritics
-            3) 1 full-character
+            3) at most 1 full-character
         Args:
         - label (str): label for which groups are provided
         - gprs (tuple): tuple containing the groups of the label
@@ -477,12 +514,12 @@ class MalayalamTokenizer:
                     elif grp[i] in self.d_c_set and d_c_count != 2 and grp[i] in d_seen:
                         print(f"Duplicate Diacritic in group {grp} for label {label}")
                         return False
+                    elif grp[i]== '്' and grp[i-1]== 'ു':
+                        i+=1
                     else:
                         if grp[i] not in self.f_c_set or \
                             grp[i] not in self.d_c_set or grp[i] not in self.h_c_set:
                             print(f"Invalid {grp[i]} in group {grp} for label {label}")
-                        if f_c_count == 1:
-                            print(f"There are no full character in group {grp} for {label}")
                         if (h_c_count, f_c_count, d_c_count) == (3, 1, 2):
                             print(f"Invalid number of half {h_c_count}, full {f_c_count} \
                                             or diacritic characters {d_c_count} in {grp} for {label}")
@@ -497,9 +534,9 @@ class MalayalamTokenizer:
 
         return True
 
-    def mal_label_transform(self, label:str)-> tuple:
+    def label_transform(self, label:str)-> tuple:
         """
-        Transform hindi labels into groups
+        Transform Malayalam labels into groups
         Args:
         - label (str): label to transform
         Returns:
@@ -528,20 +565,20 @@ class MalayalamTokenizer:
                             idx += 2
                 
                 # half-char is followed by full char
-                if self._check_f_c(label, idx):                      # suppose matra occurs after chill then check in sanity-check
-                    # checks for 1 full character
-                    if label[idx] in ["\u200d","\u200b","\u200c"]:
-                        idx += 1
-                    else:    
-                        running_grp += label[idx]
-                        idx += 1
+                if self._check_f_c(label, idx): # suppose matra occurs after chill then check in sanity-check
+                    # checks for 1 full character  
+                    running_grp += label[idx]
+                    idx += 1
                 # print("yes",running_grp)
                 # diacritics need not be always present
                 if self._check_d_c(label, idx):
                     # checks for diacritics
                     running_grp += label[idx]
                     idx += 1
-                    # there can be 1 diacritics in a group + (am or aha )
+                    if idx < len(label) and label[idx-1]=='ു' and label[idx]=='്':
+                        running_grp += (label[idx])
+                        idx += 1
+                    # there can be 1 diacritics in a group + (am or aha ) + 
                     if idx < len(label) and label[idx] in self.special_matra:
                         running_grp += (label[idx])
                         idx += 1
@@ -560,4 +597,4 @@ class MalayalamTokenizer:
                 grps = grps + (running_grp, ) 
                 # print(grps)
             running_grp = ""
-        return grps if self.mal_grp_sanity(label, grps) else ()
+        return grps if self.grp_sanity(label, grps) else ()

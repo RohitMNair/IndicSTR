@@ -1,4 +1,4 @@
-backbone: focalnet
+backbone: FocalNet_wo_B
 # ckpt_path: /home/rohitn/D1/Hindi_embed_logs/Img2Vec_resnet_50_r512/82574/train1/checkpoints/epoch=12-val_loss=0.24-val_acc=0.84.ckpt
 ckpt_path: null
 img_size: 128

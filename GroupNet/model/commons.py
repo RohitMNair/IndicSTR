@@ -5,11 +5,9 @@ from utils.metrics import (DiacriticAccuracy, FullCharacterAccuracy, CharGrpAccu
                    HalfCharacterAccuracy, CombinedHalfCharAccuracy, WRR, WRR2, ComprihensiveWRR)
 from torch.optim import AdamW, Adam
 from torch.optim.lr_scheduler import OneCycleLR
-from data.tokenizer import Tokenizer
+from data.tokenizer import HindiTokenizer, MalayalamTokenizer
 import torch.nn as nn
 import torch
-
-
 import lightning.pytorch.loggers as pl_loggers
 
 class GrpClassifier(pl.LightningModule):
@@ -122,7 +120,7 @@ class FixedGrpClassifier(pl.LightningModule):
 
         return (half_char2_logits, half_char1_logts, full_char_logits, diac_logits)
 
-class BaseSystem(pl.LightningModule):
+class HindiBaseSystem(pl.LightningModule):
     """
     Base system for GroupNets STR
     """
@@ -133,7 +131,7 @@ class BaseSystem(pl.LightningModule):
         super().__init__()
         self.max_grps = max_grps
         self.hidden_size = hidden_size
-        self.tokenizer = Tokenizer(
+        self.tokenizer = HindiTokenizer(
             half_character_classes= half_character_classes,
             full_character_classes= full_character_classes,
             diacritic_classes= diacritic_classes,

@@ -1,5 +1,5 @@
 from .encoder import ViTEncoder
-from model.commons import BaseSystem
+from model.commons import HindiBaseSystem
 
 from torch.optim.lr_scheduler import OneCycleLR
 from typing import Tuple
@@ -10,7 +10,7 @@ import lightning.pytorch as pl
 import torch
 import torch.nn as nn
 
-class ViTSTR(BaseSystem):
+class ViTSTR(HindiBaseSystem):
     """
     Group implementation of ViTSTR
     """

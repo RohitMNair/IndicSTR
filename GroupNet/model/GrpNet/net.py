@@ -1,22 +1,13 @@
 from model.FocalSTR.encoder import FocalNetEncoder
 from model.ViTSTR.encoder import ViTEncoder
 from .decoder import GroupDecoder
-from model.commons import GrpClassifier
-from utils.metrics import (DiacriticAccuracy, FullCharacterAccuracy, CharGrpAccuracy, NED,
-                   HalfCharacterAccuracy, CombinedHalfCharAccuracy, WRR, WRR2, ComprihensiveWRR)
-from torch.optim import AdamW, Adam
-from torch.optim.lr_scheduler import OneCycleLR
 from typing import Tuple
 from torch import Tensor
-from data.tokenizer import Tokenizer
-from model.commons import BaseSystem
+from model.commons import HindiBaseSystem
 
-import lightning.pytorch.loggers as pl_loggers
-import lightning.pytorch as pl
 import torch
-import torch.nn as nn
 
-class ViTGroupNet(BaseSystem):
+class ViTGroupNet(HindiBaseSystem):
     def __init__(self, emb_path:str, half_character_classes:list, full_character_classes:list,
                  diacritic_classes:list, halfer:str, hidden_size: int = 768,
                  num_hidden_layers: int = 12, num_attention_heads: int = 12,
@@ -126,7 +117,7 @@ class ViTGroupNet(BaseSystem):
         h_c_2_logits, h_c_1_logits, f_c_logits, d_logits = self.classifier(dec_x)
         return (h_c_2_logits, h_c_1_logits, f_c_logits, d_logits)
     
-class FocalGroupNet(BaseSystem):
+class FocalGroupNet(HindiBaseSystem):
     """
     GrpNet with FocalNet as Visual backbone
     """
@@ -140,6 +131,11 @@ class FocalGroupNet(BaseSystem):
                  num_attention_heads:int= 12, max_grps: int = 25, threshold:float= 0.5,
                  learning_rate: float= 1e-4, weight_decay: float= 1.0e-4, warmup_pct:float= 0.3
                  ):
+        """
+        Constructor for FocalGroupNet
+        Args:
+        - emb_path (str):
+        """
         self.hidden_sizes = [embed_dim * (2 ** i) for i in range(len(depths))]
         super().__init__(half_character_classes= half_character_classes, full_character_classes= full_character_classes,
                          diacritic_classes= diacritic_classes, halfer= halfer, max_grps= max_grps,
@@ -244,3 +240,24 @@ class FocalGroupNet(BaseSystem):
         dec_x, pos_vis_attn_weights, chr_grp_attn_weights = self.decoder(enc_x)
         h_c_2_logits, h_c_1_logits, f_c_logits, d_logits = self.classifier(dec_x)
         return (h_c_2_logits, h_c_1_logits, f_c_logits, d_logits)
+
+
+class FixedFocalGrpNet(HindiBaseSystem):
+    """
+    Focal Group Net instead of a learned Classifier we use the weights of the embedding model's classifier.
+    """
+    def __init__(self, emb_path:str, half_character_classes:list, full_character_classes:list,
+                 diacritic_classes:list, halfer:str, embed_dim: int = 96, depths:list= [2, 2, 6, 2], 
+                 focal_levels:list= [3, 3, 3, 3], focal_windows:list= [3, 3, 3, 3], 
+                 drop_path_rate:float= 0.1, mlp_ratio: float= 4.0, 
+                 hidden_dropout_prob: float = 0.0, attention_probs_dropout_prob: float = 0.0, 
+                 initializer_range: float = 0.02, layer_norm_eps: float = 1e-12, image_size: int = 224, 
+                 patch_size: int = 4, num_channels: int = 3, qkv_bias: bool = True,
+                 num_attention_heads:int= 12, max_grps: int = 25, threshold:float= 0.5,
+                 learning_rate: float= 1e-4, weight_decay: float= 1.0e-4, warmup_pct:float= 0.3):
+        """
+        Constructor for FixedFocalGroupNet
+
+        """
+        pass
+        
