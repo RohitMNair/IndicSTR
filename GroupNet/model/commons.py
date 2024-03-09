@@ -78,6 +78,7 @@ class FixedGrpClassifier(pl.LightningModule):
         - diacritic_embeddings (Tensor): the diacritic embeddings, will be the weights of the diacritic
                                             classification layer
         """
+        super().__init__()
         # parametric args
         self.hidden_size = hidden_size
         # non-parameteric args

@@ -122,7 +122,7 @@ class BaseTokenizer(ABC):
         pass
     
     @abstractmethod
-    def _decode_grp(self, **kwarts)-> str:
+    def _decode_grp(self, **kwargs)-> str:
         """
         Method which takes in class predictions of a single group and decodes
         the group
@@ -598,3 +598,48 @@ class MalayalamTokenizer(BaseTokenizer):
                 # print(grps)
             running_grp = ""
         return grps if self.grp_sanity(label, grps) else ()
+
+    @abstractmethod
+    def grp_class_encoder(self, grp: str)-> tuple:
+        """
+        Encodes a group into tensors
+
+        Returns:
+        - tuple: Containing encodings of various components
+        """
+        
+
+    @abstractmethod
+    def label_encoder(self, label:str, device:torch.device)-> tuple:
+        """
+        Converts the text label into classes indexes for classification
+        Args:
+        - label (str): The label to be encoded
+        - device (torch.device): Device in which the encodings should be saved
+
+        Returns:
+        - tuple: tuple of tensors representing various character components in the group
+        """
+        pass
+    
+    @abstractmethod
+    def _decode_grp(self, **kwargs)-> str:
+        """
+        Method which takes in class predictions of a single group and decodes
+        the group
+        Returns:
+        - str: the group formed
+        """
+        pass
+
+    @abstractmethod          
+    def decode(self, logits:tuple)-> tuple:
+        """
+        Method to decode the labels of a batch given the logits
+        Args:-
+        - logits (tuple): the logits of the model in the order
+                                                        
+        Returns:
+        - tuple: the labels of each batch item
+        """
+        pass
