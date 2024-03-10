@@ -53,7 +53,7 @@ def main(cfg: DictConfig):
                     cfg.training, 
                     callbacks = [checkpoint_callback, swa, lr_monitor],
                     logger = [csv_logger, tensorboard_logger],
-                    plugins=[SLURMEnvironment(auto_requeue= True, requeue_signal= signal.SIGUSR1)]
+                    plugins=SLURMEnvironment(auto_requeue= True, requeue_signal=signal.SIGUSR1),
                 )
     
     if cfg.restart_training and cfg.model_load is not None:
