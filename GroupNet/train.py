@@ -5,10 +5,11 @@ from utils.transforms import RescaleTransform, PadTransform
 from lightning.pytorch.callbacks import StochasticWeightAveraging, LearningRateMonitor
 from omegaconf import DictConfig
 from hydra.utils import instantiate
+from lightning.pytorch.plugins.environments import SLURMEnvironment
+from signal import Signals
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 torch.set_float32_matmul_precision('medium')
-
 print(f"Device: {device}")
 
 @hydra.main(version_base=None, config_path="configs", config_name="main")
@@ -51,7 +52,8 @@ def main(cfg: DictConfig):
     trainer = instantiate(
                     cfg.training, 
                     callbacks = [checkpoint_callback, swa, lr_monitor],
-                    logger = [csv_logger, tensorboard_logger]
+                    logger = [csv_logger, tensorboard_logger],
+                    plugins=[SLURMEnvironment()]
                 )
     
     if cfg.restart_training and cfg.model_load is not None:

@@ -123,7 +123,7 @@ class FixedGrpClassifier(pl.LightningModule):
 
 class HindiBaseSystem(pl.LightningModule):
     """
-    Base system for GroupNets STR
+    Base system for Hindi GroupNets STR
     """
     def __init__(self, half_character_classes:list, full_character_classes:list,
                  diacritic_classes:list, halfer:str, max_grps:int, hidden_size:int,
@@ -475,3 +475,73 @@ class HindiBaseSystem(pl.LightningModule):
         (h_c_2_logits, h_c_1_logits, f_c_logits, d_logits) = self.forward(batch)
         pred_labels = self.tokenizer.decode((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits))
         return pred_labels, (h_c_2_logits, h_c_1_logits, f_c_logits, d_logits)
+
+class MalayalamBaseSystem(pl.LightningModule):
+    """
+    Base class for Malayalam GroupNets STR
+    """
+    def __init__(self, half_character_classes:list, full_character_classes:list,
+                 diacritic_classes:list, halfer:str, max_grps:int, hidden_size:int,
+                 threshold:float= 0.5, learning_rate: float= 1e-4,
+                 weight_decay: float= 1.0e-4, warmup_pct:float= 0.3):
+        super().__init__()
+        self.max_grps = max_grps
+        self.hidden_size = hidden_size
+        self.tokenizer = MalayalamTokenizer(
+            half_character_classes= half_character_classes,
+            full_character_classes= full_character_classes,
+            diacritic_classes= diacritic_classes,
+            halfer= halfer,
+            threshold= threshold,
+            max_grps= self.max_grps,
+        )
+        self.threshold = threshold
+        self.lr = learning_rate
+        self.weight_decay = weight_decay
+        self.pct_start = warmup_pct
+        
+        self.num_h_c_classes = len(self.tokenizer.h_c_classes)
+        self.num_f_c_classes = len(self.tokenizer.f_c_classes)
+        self.num_d_classes =  len(self.tokenizer.d_classes)
+
+        self.classifier = GrpClassifier(
+            hidden_size= self.hidden_size,
+            num_half_character_classes= self.num_h_c_classes,
+            num_full_character_classes= self.num_f_c_classes,
+            num_diacritic_classes= self.num_d_classes,
+        )
+
+        self.h_c_2_loss = nn.CrossEntropyLoss(reduction= 'mean', ignore_index= self.tokenizer.pad_id)
+        self.h_c_1_loss = nn.CrossEntropyLoss(reduction= 'mean', ignore_index= self.tokenizer.pad_id)
+        self.f_c_loss = nn.CrossEntropyLoss(reduction= 'mean', ignore_index= self.tokenizer.pad_id)
+        self.d_loss = nn.BCEWithLogitsLoss(reduction= 'mean')
+
+        # Trainig Metrics
+        self.train_h_c_2_acc = HalfCharacterAccuracy(threshold = self.threshold)
+        self.train_h_c_1_acc = HalfCharacterAccuracy(threshold = self.threshold)
+        self.train_comb_h_c_acc = CombinedHalfCharAccuracy(threshold= self.threshold)
+        self.train_f_c_acc = FullCharacterAccuracy(threshold = self.threshold)
+        self.train_d_acc = DiacriticAccuracy(threshold = self.threshold)
+        self.train_grp_acc = CharGrpAccuracy(threshold= self.threshold)
+        # self.train_wrr = ComprihensiveWRR(threshold= self.threshold)
+        self.train_wrr2 = WRR2(threshold= self.threshold)
+        # Validation Metrics
+        self.val_h_c_1_acc = HalfCharacterAccuracy(threshold = self.threshold)
+        self.val_h_c_2_acc = HalfCharacterAccuracy(threshold = self.threshold)
+        self.val_comb_h_c_acc = CombinedHalfCharAccuracy(threshold= self.threshold)
+        self.val_f_c_acc = FullCharacterAccuracy(threshold = self.threshold)
+        self.val_d_acc = DiacriticAccuracy(threshold = self.threshold)
+        self.val_grp_acc = CharGrpAccuracy(threshold= self.threshold)
+        # self.val_wrr = ComprihensiveWRR(threshold= self.threshold)
+        self.val_wrr2 = WRR2(threshold= self.threshold)
+        # Testing Metrics
+        self.test_h_c_1_acc = HalfCharacterAccuracy(threshold = self.threshold)
+        self.test_h_c_2_acc = HalfCharacterAccuracy(threshold = self.threshold)
+        self.test_comb_h_c_acc = CombinedHalfCharAccuracy(threshold= self.threshold)
+        self.test_f_c_acc = FullCharacterAccuracy(threshold = self.threshold)
+        self.test_d_acc = DiacriticAccuracy(threshold = self.threshold)
+        self.test_grp_acc = CharGrpAccuracy(threshold= self.threshold)
+        # self.test_wrr = ComprihensiveWRR(threshold= self.threshold)
+        self.test_wrr = WRR()
+        self.test_wrr2 = WRR2(threshold= self.threshold)
+        self.ned = NED()

@@ -1,5 +1,5 @@
 import argparse
-from Img2Vec.GroupNet.data.tokenizer import Tokenizer, MalayalamTokenizer
+from Img2Vec.GroupNet.data.tokenizer import HindiTokenizer, MalayalamTokenizer
 
 hindi_half_character_classes = [ 'क', 'ख', 'ग', 'घ', 'ङ',
                             'च', 'छ', 'ज', 'झ', 'ञ',
@@ -44,15 +44,15 @@ mal_full_character_classes= mal_svar+ mal_vyanjan+ mal_chillaksharam+ mal_ank + 
 
 def freq_counter(gt_file_path:str, charset:str, is_gt:bool = True):
     ngrp_freq = {}
-    if charset == 'h':
+    if charset.lower() == 'h':
         char_frq = {k:0 for k in (hindi_half_character_classes + hindi_full_character_classes + hindi_diacritic_classes + [hindi_halfer])}
-        tokenizer = Tokenizer(
+        tokenizer = HindiTokenizer(
                         half_character_classes= hindi_half_character_classes,
                         full_character_classes= hindi_full_character_classes,
                         diacritic_classes= hindi_diacritic_classes,
                         halfer= hindi_halfer,
                     )
-    elif charset == 'm':
+    elif charset.lower() == 'm':
         char_frq = {k:0 for k in (mal_half_character_classes + mal_full_character_classes + mal_matras + [mal_chandrakala])}
         tokenizer = MalayalamTokenizer(
             chill = mal_chillaksharam,

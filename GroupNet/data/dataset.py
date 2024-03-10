@@ -56,6 +56,8 @@ class HindiLMDBDataset(Dataset):
                 label = txn.get(label_key).decode()
                 label = label.strip()
                 label = ''.join(label.split()) # remove any white-spaces
+                # remove other characters
+                # label = ''.join(c for c in label if c in (self.tokenizer.f_c_classes + self.tokenizer.d_classes))
                 # normalize unicode to remove redundant representations
                 label = unicodedata.normalize('NFKD', label)
                 if index % 100000 == 0:
