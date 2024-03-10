@@ -6,7 +6,7 @@ from lightning.pytorch.callbacks import StochasticWeightAveraging, LearningRateM
 from omegaconf import DictConfig
 from hydra.utils import instantiate
 from lightning.pytorch.plugins.environments import SLURMEnvironment
-from signal import Signals
+import signal
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 torch.set_float32_matmul_precision('medium')
@@ -53,7 +53,7 @@ def main(cfg: DictConfig):
                     cfg.training, 
                     callbacks = [checkpoint_callback, swa, lr_monitor],
                     logger = [csv_logger, tensorboard_logger],
-                    plugins=[SLURMEnvironment()]
+                    plugins=[SLURMEnvironment(auto_requeue= True, requeue_signal= signal.SIGUSR1)]
                 )
     
     if cfg.restart_training and cfg.model_load is not None:
