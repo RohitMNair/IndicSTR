@@ -6,6 +6,7 @@ from torch import Tensor
 from model.commons import HindiBaseSystem, FixedGrpClassifier
 
 import torch
+import torch.nn as nn
 
 class ViTGroupNet(HindiBaseSystem):
     def __init__(self, emb_path:str, half_character_classes:list, full_character_classes:list,
@@ -287,7 +288,11 @@ class FixedFocalGroupNet(HindiBaseSystem):
                                                                 half_character_classes,
                                                                 full_character_classes,
                                                                 diacritic_classes
-                                                            )   
+                                                            )
+        self.h_c_2_emb = nn.Parameter(self.h_c_2_emb, requires_grad= False)
+        self.h_c_1_emb = nn.Parameter(self.h_c_1_emb, requires_grad= False)
+        self.f_c_emb = nn.Parameter(self.f_c_emb, requires_grad= False)
+        self.d_emb = nn.Parameter(self.d_emb, requires_grad= False)
         
         self.intermediate_size = int(self.mlp_ratio * self.hidden_sizes[-1])
     
