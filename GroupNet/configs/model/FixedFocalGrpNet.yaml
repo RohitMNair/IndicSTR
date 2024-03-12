@@ -1,5 +1,5 @@
 _target_: model.GrpNet.net.FixedFocalGroupNet
-emb_path: /home/rohitn/IndianSTR/Img2Vec/GroupNet/embeddings/new/focalnet_wo_B_r256.pth
+emb_path: ./embeddings/new/focalnet_wo_B_r256.pth
 # hidden_sizes: [128, 256, 512, 1024]
 embed_dim: 128
 depths: [2, 2, 18, 2]
