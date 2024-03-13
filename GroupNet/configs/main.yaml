@@ -42,6 +42,7 @@ datamodule:
   full_character_classes: ${charset.full_character_classes}
   diacritic_classes: ${charset.diacritic_classes}
   halfer: ${charset.halfer}
+  remove_unseen: false
 
 csv_logger:
   _target_: lightning.pytorch.loggers.CSVLogger

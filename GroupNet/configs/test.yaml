@@ -14,6 +14,7 @@ datamodule:
   batch_size: 64 
   num_workers: 8
   drop_last: false
+  remove_unseen: true
 
 csv_logger:
   _target_: lightning.pytorch.loggers.CSVLogger
