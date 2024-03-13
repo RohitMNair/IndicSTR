@@ -418,8 +418,9 @@ class HindiTokenizer(BaseTokenizer):
         
         return tuple(pred_labels)
 
-class MarathiTokenizer(BaseTokenizer):
-    pass
+# class MarathiTokenizer(BaseTokenizer):
+#     pass
+
 class MalayalamTokenizer(BaseTokenizer):
     """
     Class for encoding and decoding labels
