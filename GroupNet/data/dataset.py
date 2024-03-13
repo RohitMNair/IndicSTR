@@ -61,7 +61,7 @@ class HindiLMDBDataset(Dataset):
                 # normalize unicode to remove redundant representations
                 label = unicodedata.normalize('NFKD', label)
                 # remove other characters
-                if remove_unseen:
+                if self.remove_unseen:
                     label = ''.join(c for c in label if c in (self.tokenizer.f_c_classes + \
                                     self.tokenizer.h_c_classes + self.tokenizer.d_classes))
                 if index % 100000 == 0:
