@@ -18,9 +18,9 @@ class LMDBHindiDataModule(pl.LightningDataModule):
     """
     def __init__(self, train_dir:Optional[str], val_dir:Optional[str], test_dir:Optional[str],
                 half_character_classes:list, full_character_classes:list, 
-                diacritic_classes:list, halfer:str,
-                transforms: transforms.Compose, test_transforms: transforms.Compose,
-                batch_size:int =32, num_workers:int= 4, drop_last:bool= False, 
+                diacritic_classes:list, halfer:str, transforms: transforms.Compose, 
+                test_transforms: transforms.Compose, batch_size:int =32, num_workers:int= 4,
+                drop_last:bool= False, remove_unseen:bool= False
                 ):
         super().__init__()
         self.train_dir = train_dir
@@ -35,6 +35,7 @@ class LMDBHindiDataModule(pl.LightningDataModule):
         self.full_character_classes = full_character_classes
         self.diacritic_classes = diacritic_classes
         self.halfer = halfer
+        self.remove_unseen = remove_unseen
 
         #non-parametric attributes
         self.train_dataset = None
@@ -50,6 +51,7 @@ class LMDBHindiDataModule(pl.LightningDataModule):
                                     full_character_classes= self.full_character_classes,
                                     diacritic_classes= self.diacritic_classes,
                                     halfer= self.halfer,
+                                    remove_unseen = self.remove_unseen,
                                 )
             
         if self.val_dir:
@@ -60,6 +62,7 @@ class LMDBHindiDataModule(pl.LightningDataModule):
                                     full_character_classes= self.full_character_classes,
                                     diacritic_classes= self.diacritic_classes,
                                     halfer= self.halfer,
+                                    remove_unseen = self.remove_unseen,
                                 )
             
         if self.test_dir:
@@ -70,6 +73,7 @@ class LMDBHindiDataModule(pl.LightningDataModule):
                                 full_character_classes= self.full_character_classes,
                                 diacritic_classes= self.diacritic_classes,
                                 halfer= self.halfer,
+                                remove_unseen = self.remove_unseen,
                             )
 
     def train_dataloader(self):

@@ -14,11 +14,12 @@ from .tokenizer import HindiTokenizer, MalayalamTokenizer
 class HindiLMDBDataset(Dataset):
     def __init__(self, data_dir: str, transforms: transforms.Compose,
                  half_character_classes:list, full_character_classes:list, 
-                 diacritic_classes:list, halfer:str):
+                 diacritic_classes:list, halfer:str, remove_unseen:bool= False):
         super().__init__()
         self._env = None
         self.data_dir = data_dir
         self.transforms = transforms
+        self.remove_unseen = remove_unseen
         self.items = []
         self.processed_indexes = []
         self.tokenizer = HindiTokenizer(
@@ -56,10 +57,13 @@ class HindiLMDBDataset(Dataset):
                 label = txn.get(label_key).decode()
                 label = label.strip()
                 label = ''.join(label.split()) # remove any white-spaces
-                # remove other characters
-                # label = ''.join(c for c in label if c in (self.tokenizer.f_c_classes + self.tokenizer.d_classes))
+                
                 # normalize unicode to remove redundant representations
                 label = unicodedata.normalize('NFKD', label)
+                # remove other characters
+                if remove_unseen:
+                    label = ''.join(c for c in label if c in (self.tokenizer.f_c_classes + \
+                                    self.tokenizer.h_c_classes self.tokenizer.d_classes))
                 if index % 100000 == 0:
                     print(f"Processed {index} number of labels", flush = True)
 
