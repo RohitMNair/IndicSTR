@@ -63,7 +63,7 @@ class HindiLMDBDataset(Dataset):
                 # remove other characters
                 if self.remove_unseen:
                     label = ''.join(c for c in label if c in (self.tokenizer.f_c_classes + \
-                                    self.tokenizer.h_c_classes + self.tokenizer.d_classes + self.tokenizer.halfer))
+                                    self.tokenizer.h_c_classes + self.tokenizer.d_classes + [self.tokenizer.halfer]))
                 if index % 100000 == 0:
                     print(f"Processed {index} number of labels", flush = True)
 
