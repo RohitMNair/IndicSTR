@@ -15,21 +15,24 @@ model_load: # this won't be used if restart_training is false
 
 defaults: # this wont be used if restart_training is true
   - model: ViTSTR # Options are FocalSTR, ViTSTR, GrpNet, FocalPosVisNet, FocalGrpNet
-  - charset: hindi
+  - charset: devanagari
   - _self_
 
 model:
-  half_character_classes: ${charset.half_character_classes}
-  full_character_classes: ${charset.full_character_classes}
-  diacritic_classes: ${charset.diacritic_classes}
-  halfer: ${charset.halfer}
+  vyanjan: ${charset.vyanjan}
+  svar: ${charset.svar}
+  matras: ${charset.matras}
+  chinh: ${charset.chinh}
+  ank: ${charset.ank}
+  nukthas: ${charset.nukthas}
+  halanth: ${charset.halanth}
 
 transforms:
   rotation: 60
   img_size: ${img_size}
   
 datamodule:
-  _target_: data.module.LMDBHindiDataModule
+  _target_: data.module.LMDBDevanagariDataModule
   train_dir: /home/rohitn/D1/HindiSynth/hindi_train_merged_lmdb
   val_dir: /home/rohitn/D1/HindiSynth/hindi_val_merged_lmdb
   # train_dir: /home/rohitn/D1/HindiGlyphSynth/hindi_vertical_synth_lmdb
@@ -38,10 +41,13 @@ datamodule:
   batch_size: 64 
   num_workers: 8
   drop_last: false
-  half_character_classes: ${charset.half_character_classes}
-  full_character_classes: ${charset.full_character_classes}
-  diacritic_classes: ${charset.diacritic_classes}
-  halfer: ${charset.halfer}
+  vyanjan: ${charset.vyanjan}
+  svar: ${charset.svar}
+  matras: ${charset.matras}
+  chinh: ${charset.chinh}
+  ank: ${charset.ank}
+  nukthas: ${charset.nukthas}
+  halanth: ${charset.halanth}
   remove_unseen: false
 
 csv_logger:
