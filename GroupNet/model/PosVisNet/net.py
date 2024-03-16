@@ -1,27 +1,20 @@
 from model.FocalSTR.encoder import FocalNetEncoder
 from model.ViTSTR.encoder import ViTEncoder
 from .decoder import PosVisDecoder
-from model.commons import GrpClassifier
-from utils.metrics import (DiacriticAccuracy, FullCharacterAccuracy, CharGrpAccuracy, NED,
-                   HalfCharacterAccuracy, CombinedHalfCharAccuracy, WRR, WRR2, ComprihensiveWRR)
-from torch.optim import AdamW, Adam
-from torch.optim.lr_scheduler import OneCycleLR
-from typing import Tuple, Optional
+from model.commons import DevanagariBaseSystem
 from torch import Tensor
-from data.tokenizer import Tokenizer
-from commons import HindiBaseSystem
-import lightning.pytorch.loggers as pl_loggers
+from typing import Tuple
 import lightning.pytorch as pl
 import torch
 import torch.nn as nn
 
-class ViTPosVisNet(HindiBaseSystem):
+class ViTPosVisNet(DevanagariBaseSystem):
     """
     Encoder Decoder Transformer network that performs Position-Visual attention on 
     visual representations of the encoder (ViT) and decodes characters
     """
-    def __init__(self, half_character_classes:list, full_character_classes:list,
-                 diacritic_classes:list, halfer:str, hidden_size: int = 768,
+    def __init__(self, svar:list, vyanjan:list, matras:list, ank:list, chinh:list,
+                 nukthas:list, halanth:str, hidden_size: int = 768,
                  num_hidden_layers: int = 12, num_decoder_layers: int= 1, num_attention_heads: int = 12,
                  mlp_ratio: float= 4.0, hidden_dropout_prob: float = 0.0,
                  attention_probs_dropout_prob: float = 0.0, initializer_range: float = 0.02,
@@ -57,8 +50,8 @@ class ViTPosVisNet(HindiBaseSystem):
         - warmup_pct (float, default= 0.3): The percentage of the cycle (in number of steps) 
                                             spent increasing the learning rate for OneCyleLR
         """
-        super().__init__(half_character_classes= half_character_classes, full_character_classes= full_character_classes,
-                         diacritic_classes= diacritic_classes, halfer= halfer, max_grps= max_grps,
+        super().__init__(svar = svar, vyanjan= vyanjan, matras= matras, ank= ank, chinh= chinh, 
+                         nukthas= nukthas, halanth= halanth, max_grps= max_grps,
                          hidden_size= hidden_size, threshold= threshold, learning_rate= learning_rate,
                          weight_decay= weight_decay, warmup_pct= warmup_pct)
         self.save_hyperparameters()
@@ -103,7 +96,7 @@ class ViTPosVisNet(HindiBaseSystem):
                                             qkv_bias= self.qkv_bias)
                                         for i in range(self.num_decoder_layers)])
     
-    def forward(self, x:torch.Tensor)-> Tuple[Tuple[Tensor, Tensor, Tensor, Tensor], Tensor]:
+    def forward(self, x:torch.Tensor)-> Tuple[Tensor, Tensor, Tensor, Tensor]:
         """
         Forward pass for ViTPosVisNet
         Args:
@@ -119,13 +112,13 @@ class ViTPosVisNet(HindiBaseSystem):
         h_c_2_logits, h_c_1_logits, f_c_logits, d_logits = self.classifier(dec_x)
         return (h_c_2_logits, h_c_1_logits, f_c_logits, d_logits)
 
-class FocalPosVisNet(pl.LightningModule):
+class FocalPosVisNet(DevanagariBaseSystem):
     """
     Encoder Decoder Transformer network that performs Position-Visual attention on 
     visual representations of the encoder (ViT) and decodes characters
     """
-    def __init__(self, half_character_classes:list, full_character_classes:list,
-                 diacritic_classes:list, halfer:str, embed_dim: int = 96, depths:list= [2, 2, 6, 2],
+    def __init__(self, svar:list, vyanjan:list, matras:list, ank:list, chinh:list,
+                 nukthas:list, halanth:str, embed_dim: int = 96, depths:list= [2, 2, 6, 2],
                  focal_levels:list= [2, 2, 2, 2], focal_windows:list= [3, 3, 3, 3], 
                  drop_path_rate:float= 0.1, mlp_ratio: float= 4.0, 
                  hidden_dropout_prob: float = 0.0, attention_probs_dropout_prob: float = 0.0, 
@@ -167,8 +160,8 @@ class FocalPosVisNet(pl.LightningModule):
         self.save_hyperparameters()
         self.embed_dim = embed_dim
         self.hidden_sizes = [self.embed_dim * (2 ** i) for i in range(len(depths))]
-        super().__init__(half_character_classes= half_character_classes, full_character_classes= full_character_classes,
-                         diacritic_classes= diacritic_classes, halfer= halfer, max_grps= max_grps,
+        super().__init__(svar = svar, vyanjan= vyanjan, matras= matras, ank= ank, chinh= chinh, 
+                         nukthas= nukthas, halanth= halanth, max_grps= max_grps,
                          hidden_size= self.hidden_sizes[-1], threshold= threshold, learning_rate= learning_rate,
                          weight_decay= weight_decay, warmup_pct= warmup_pct)
         self.depths = depths
@@ -213,7 +206,7 @@ class FocalPosVisNet(pl.LightningModule):
                                             qkv_bias= self.qkv_bias)
                                         for i in range(self.num_decoder_layers)])
     
-    def forward(self, x:torch.Tensor)-> Tuple[Tuple[Tensor, Tensor, Tensor, Tensor], Tensor]:
+    def forward(self, x:torch.Tensor)-> Tuple[Tensor, Tensor, Tensor, Tensor]:
         """
         Forward pass for FocalPosVisNet
         Args:

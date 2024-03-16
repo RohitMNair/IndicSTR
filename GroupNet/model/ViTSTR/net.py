@@ -1,21 +1,17 @@
 from .encoder import ViTEncoder
-from model.commons import HindiBaseSystem
-
-from torch.optim.lr_scheduler import OneCycleLR
+from model.commons import DevanagariBaseSystem
 from typing import Tuple
 from torch import Tensor
 
-import lightning.pytorch.loggers as pl_loggers
-import lightning.pytorch as pl
 import torch
 import torch.nn as nn
 
-class ViTSTR(HindiBaseSystem):
+class ViTSTR(DevanagariBaseSystem):
     """
     Group implementation of ViTSTR
     """
-    def __init__(self, half_character_classes:list, full_character_classes:list,
-                 diacritic_classes:list, halfer:str, hidden_size: int = 768,
+    def __init__(self, svar:list, vyanjan:list, matras:list, ank:list, chinh:list,
+                 nukthas:list, halanth:str, hidden_size: int = 768,
                  num_hidden_layers: int = 12, num_attention_heads: int = 12,
                  mlp_ratio: float= 4.0, hidden_dropout_prob: float = 0.0,
                  attention_probs_dropout_prob: float = 0.0, initializer_range: float = 0.02,
@@ -24,8 +20,8 @@ class ViTSTR(HindiBaseSystem):
                  learning_rate: float= 1e-4, weight_decay: float= 1.0e-4, warmup_pct:float= 0.3):
         
         max_grps = (image_size // patch_size)**2 + 1
-        super().__init__(half_character_classes = half_character_classes, full_character_classes= full_character_classes,
-                         diacritic_classes= diacritic_classes, halfer= halfer, max_grps= max_grps, hidden_size= hidden_size,
+        super().__init__(svar = svar, vyanjan= vyanjan, matras= matras, ank= ank, chinh= chinh, 
+                         nukthas= nukthas, halanth= halanth, max_grps= max_grps, hidden_size= hidden_size,
                          threshold= threshold, learning_rate= learning_rate, weight_decay= weight_decay,
                          warmup_pct= warmup_pct)
         self.save_hyperparameters()
