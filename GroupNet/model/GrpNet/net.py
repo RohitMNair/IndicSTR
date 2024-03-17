@@ -3,7 +3,7 @@ from model.ViTSTR.encoder import ViTEncoder
 from .decoder import GroupDecoder
 from typing import Tuple
 from torch import Tensor
-from model.commons import HindiBaseSystem, FixedGrpClassifier, DevanagariBaseSystem
+from model.commons import FixedGrpClassifier, DevanagariBaseSystem
 
 import torch
 import torch.nn as nn

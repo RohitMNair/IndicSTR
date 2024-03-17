@@ -5,7 +5,7 @@ from utils.metrics import (DiacriticAccuracy, FullCharacterAccuracy, CharGrpAccu
                    HalfCharacterAccuracy, CombinedHalfCharAccuracy, WRR, WRR2, ComprihensiveWRR)
 from torch.optim import AdamW, Adam
 from torch.optim.lr_scheduler import OneCycleLR
-from data.tokenizer import HindiTokenizer, MalayalamTokenizer, DevanagariTokenizer
+from data.tokenizer import MalayalamTokenizer, DevanagariTokenizer
 import torch.nn as nn
 import torch
 import lightning.pytorch.loggers as pl_loggers
