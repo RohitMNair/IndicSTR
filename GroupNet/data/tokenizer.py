@@ -43,6 +43,12 @@ class DevanagariTokenizer:
         self.rev_h_c_label_map = {c:k for k,c in enumerate(self.h_c_classes, start = 0)}
         self.rev_f_c_label_map = {c:k for k,c in enumerate(self.f_c_classes, start = 0)}
         self.rev_d_label_map = {c:k for k,c in enumerate(self.d_classes, start= 0)}
+
+    def get_charset(self)-> list:
+        """
+        returns the complete charset used by the tokenizer
+        """
+        return self.h_c_classes + self.f_c_classes + self.d_classes
     
     def _normalize_charset(self):
         """
@@ -148,7 +154,7 @@ class DevanagariTokenizer:
 
                 elif self._check_diac(grp, i) and d_c_count > 0:
                     if f_c_count != 0:
-                        print(f"Matra cannot be attached to Half-char: {grp} in {label}")
+                        print(f"No full char to attach Matra: {grp} in {label}")
                         return False
                     
                     if d_c_count == 2: # First diacritic
@@ -365,15 +371,19 @@ class DevanagariTokenizer:
             "Diacritic preds and max must contain 2 elements for 2 diacritics"
         
         grp = ""
-        grp += self.h_c_label_map[int(h_c_2_pred.item())] + self.halanth if self.h_c_label_map[int(h_c_2_pred.item())] != HindiTokenizer.BLANK \
-            and self.h_c_label_map[int(h_c_2_pred.item())] != HindiTokenizer.PAD else ""
-        grp += self.h_c_label_map[int(h_c_1_pred.item())] + self.halanth if self.h_c_label_map[int(h_c_1_pred.item())] != HindiTokenizer.BLANK \
-            and self.h_c_label_map[int(h_c_1_pred.item())] != HindiTokenizer.PAD else ""
+        grp += self.h_c_label_map[int(h_c_2_pred.item())] + self.halanth \
+                if self.h_c_label_map[int(h_c_2_pred.item())] != DevanagariTokenizer.BLANK \
+                    and self.h_c_label_map[int(h_c_2_pred.item())] != DevanagariTokenizer.PAD else ""
+        
+        grp += self.h_c_label_map[int(h_c_1_pred.item())] + self.halanth \
+                if self.h_c_label_map[int(h_c_1_pred.item())] != DevanagariTokenizer.BLANK \
+                    and self.h_c_label_map[int(h_c_1_pred.item())] != DevanagariTokenizer.PAD else ""
+        
         grp += self.f_c_label_map[int(f_c_pred.item())]
         grp += self.d_c_label_map[int(d_pred[0].item())] if d_max[0] else ""
         grp += self.d_c_label_map[int(d_pred[1].item())] if d_max[1] else ""
                 
-        return grp.replace(HindiTokenizer.BLANK, "").replace(HindiTokenizer.PAD, "") # remove all [B], [P] occurences
+        return grp.replace(DevanagariTokenizer.BLANK, "").replace(DevanagariTokenizer.PAD, "") # remove all [B], [P] occurences
                 
     def decode(self, logits:Tuple[Tensor, Tensor, Tensor, Tensor])-> tuple:
         """
@@ -410,7 +420,7 @@ class DevanagariTokenizer:
                                 d_pred= d_preds[i,j],
                                 d_max= d_max[i,j]
                             )
-                if HindiTokenizer.EOS in grp:
+                if DevanagariTokenizer.EOS in grp:
                     break
                 else:
                     label += grp
@@ -420,7 +430,7 @@ class DevanagariTokenizer:
         
         return tuple(pred_labels) 
 
-class MalayalamTokenizer(BaseTokenizer):
+class MalayalamTokenizer:
     """
     Class for encoding and decoding labels
     """
@@ -440,6 +450,12 @@ class MalayalamTokenizer(BaseTokenizer):
                          diacritic_classes= diacritic_classes, halfer= halfer, threshold= threshold, max_grps= max_grps)
         self.chill= chill
         self.special_matra= special_matra
+
+    def get_charset(self)-> list:
+        """
+        returns the complete charset used by the tokenizer
+        """
+        return self.h_c_classes + self.f_c_classes + self.d_classes
     
     def _normalize_charset(self)-> None:
         """
@@ -600,48 +616,3 @@ class MalayalamTokenizer(BaseTokenizer):
                 # print(grps)
             running_grp = ""
         return grps if self.grp_sanity(label, grps) else ()
-
-    @abstractmethod
-    def grp_class_encoder(self, grp: str)-> tuple:
-        """
-        Encodes a group into tensors
-
-        Returns:
-        - tuple: Containing encodings of various components
-        """
-        
-
-    @abstractmethod
-    def label_encoder(self, label:str, device:torch.device)-> tuple:
-        """
-        Converts the text label into classes indexes for classification
-        Args:
-        - label (str): The label to be encoded
-        - device (torch.device): Device in which the encodings should be saved
-
-        Returns:
-        - tuple: tuple of tensors representing various character components in the group
-        """
-        pass
-    
-    @abstractmethod
-    def _decode_grp(self, **kwargs)-> str:
-        """
-        Method which takes in class predictions of a single group and decodes
-        the group
-        Returns:
-        - str: the group formed
-        """
-        pass
-
-    @abstractmethod          
-    def decode(self, logits:tuple)-> tuple:
-        """
-        Method to decode the labels of a batch given the logits
-        Args:-
-        - logits (tuple): the logits of the model in the order
-                                                        
-        Returns:
-        - tuple: the labels of each batch item
-        """
-        pass

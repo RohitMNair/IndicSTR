@@ -1,67 +1,27 @@
 import argparse
-from Img2Vec.GroupNet.data.tokenizer import HindiTokenizer, MalayalamTokenizer
-
-hindi_half_character_classes = [ 'क', 'ख', 'ग', 'घ', 'ङ',
-                            'च', 'छ', 'ज', 'झ', 'ञ',
-                            'ट', 'ठ', 'ड', 'ढ', 'ण',
-                            'त', 'थ', 'द', 'ध', 'न',
-                            'प', 'फ', 'ब', 'भ', 'म',
-                            'य', 'र', 'ल', 'ळ', 'व', 'श',
-                            'ष', 'स', 'ह']
-hindi_full_character_classes = ['अ', 'आ', 'इ', 'ई', 'उ', 
-                'ऊ', 'ऋ', 'ॠ', 'ए', 'ऐ',
-                'ओ', 'औ', 'ॲ', 'ऍ', 'ऑ',
-                'क', 'ख', 'ग', 'घ', 'ङ',
-                'च', 'छ', 'ज', 'झ', 'ञ',
-                'ट', 'ठ', 'ड', 'ढ', 'ण',
-                'त', 'थ', 'द', 'ध', 'न',
-                'प', 'फ', 'ब', 'भ', 'म',
-                'य', 'र', 'ल', 'ळ', 'व', 
-                'श', 'ष', 'स', 'ह',
-                'ॐ', '₹', '।', '!', '$', ',', '.', '-', '%', '॥','ॽ', # characters that occur independently
-                '०','१','२','३','४','५','६' ,'७' ,'८' ,'९', # numerals
-                ]
-hindi_diacritic_classes= ['ा','ि','ी','ु','ू','ृ', 'े','ै', 'ो', 'ौ', 'ॅ', 'ॉ', 'ँ','ं', 'ः', '़'] # ensure that halfer is not in this 
-hindi_halfer = '्'
-
-mal_svar = ['അ', 'ആ', 'ഇ', 'ഈ', 'ഉ', 'ഊ', 'ഋ', 'എ', 'ഏ','ഐ',
-        'ഒ', 'ഓ', 'ഔ','അം','അഃ']  # 'ൠ' has not been added as it has not been used in recent malayalam
-mal_vyanjan = ['ക', 'ഖ', 'ഗ', 'ഘ', 'ങ',
-           'ച', 'ഛ', 'ജ', 'ഝ', 'ഞ',
-           'ട', 'ഠ', 'ഡ', 'ഢ', 'ണ',
-           'ത', 'ഥ', 'ദ', 'ധ', 'ന',
-           'പ', 'ഫ', 'ബ', 'ഭ', 'മ',
-           'യ', 'ര', 'ല', 'വ', 'ശ',
-           'ഷ', 'സ', 'ഹ','ള','ഴ','റ'] # should add conditions to chillaksharam that it should not have any matra attached to it
-mal_chillaksharam= ['ൺ','ൻ','ർ','ൽ','ൾ']
-mal_chandrakala = '്'
-mal_chihn = ['ഓം', '₹', '।', '!', '$', '%', '?','.',',',"-",'(',')'] # characters that occur independently and 'ൽ' has been taken out for confirmation
-mal_ank = ['൦', '൧', '൨', '൩', '൪', '൫', '൬', '൭', '൮', '൯']  # numbers
-mal_matras = ['ാ','ി', 'ീ', 'ു', 'ൂ', 'ൃ','ൈ', 'ൊ', 'ോ', 'ൗ','ൌ', 'െ', 'േ', 'ം', 'ഃ', '഻']  # 'ു്' has been added because of its presence in older datasets added '഻' which sounds rr	 also has been added
-mal_special_matra=['ം', 'ഃ']
-mal_half_character_classes= mal_vyanjan
-mal_full_character_classes= mal_svar+ mal_vyanjan+ mal_chillaksharam+ mal_ank + mal_chihn
+import yaml
+from Img2Vec.GroupNet.data.tokenizer import DevanagariTokenizer, MalayalamTokenizer
 
 def freq_counter(gt_file_path:str, charset:str, is_gt:bool = True):
     ngrp_freq = {}
-    if charset.lower() == 'h':
-        char_frq = {k:0 for k in (hindi_half_character_classes + hindi_full_character_classes + hindi_diacritic_classes + [hindi_halfer])}
-        tokenizer = HindiTokenizer(
-                        half_character_classes= hindi_half_character_classes,
-                        full_character_classes= hindi_full_character_classes,
-                        diacritic_classes= hindi_diacritic_classes,
-                        halfer= hindi_halfer,
-                    )
-    elif charset.lower() == 'm':
-        char_frq = {k:0 for k in (mal_half_character_classes + mal_full_character_classes + mal_matras + [mal_chandrakala])}
-        tokenizer = MalayalamTokenizer(
-            chill = mal_chillaksharam,
-            special_matra= mal_special_matra,
-            half_character_classes= mal_half_character_classes,
-            full_character_classes = mal_full_character_classes,
-            diacritic_classes= mal_matras,
-            halfer= mal_chandrakala,
+    tokenizer = None
+    with open(f"Img2Vec/GroupNet/configs/charset/{charset}.yaml", 'r') as yaml_file:
+        data = yaml.load(yaml_file, Loader=yaml.FullLoader)
+
+    if charset == 'devanagari':
+        tokenizer= DevanagariTokenizer(
+            svar= data['svar'],
+            vyanjan= data['vyanjan'],
+            matras= data['matras'],
+            ank= data['ank'],
+            chinh= data['chinh'],
+            nukthas= data['nukthas'],
+            halanth= data['halanth'],
         )
+    else :
+        raise NotImplementedError("Language Not implemented")
+    
+    char_frq = {c:0 for c in tokenizer.get_charset()}
     cntr = 1
     with open(gt_file_path, 'r') as f:
         for line in f:
