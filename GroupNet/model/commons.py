@@ -288,8 +288,8 @@ class DevanagariBaseSystem(pl.LightningModule):
         assert gt_labels is not None, "gt_labels cannot be none"
         assert pred_labels is not None, "pred_labels cannot be none"
         # Log the images (Give them different names)
-        _mean_ = torch.tensor([0.485, 0.456, 0.406])
-        _std_ = torch.tensor([0.229, 0.224, 0.225])
+        _mean_ = torch.tensor([0.485, 0.456, 0.406], device= self.device)
+        _std_ = torch.tensor([0.229, 0.224, 0.225], device= self.device)
         _mean_ = _mean_.view(1, 3, 1, 1).expand_as(viz_batch)
         _std_ = _std_.view(1, 3, 1, 1).expand_as(viz_batch)
         unnorm_viz_batch = viz_batch * _std_ + _mean_
@@ -652,8 +652,8 @@ class HindiBaseSystem(pl.LightningModule):
         assert gt_labels is not None, "gt_labels cannot be none"
         assert pred_labels is not None, "pred_labels cannot be none"
         # Log the images (Give them different names)
-        _mean_ = torch.tensor([0.485, 0.456, 0.406])
-        _std_ = torch.tensor([0.229, 0.224, 0.225])
+        _mean_ = torch.tensor([0.485, 0.456, 0.406], device= self.device)
+        _std_ = torch.tensor([0.229, 0.224, 0.225], device= self.device)
         _mean_ = _mean_.view(1, 3, 1, 1).expand_as(viz_batch)
         _std_ = _std_.view(1, 3, 1, 1).expand_as(viz_batch)
         unnorm_viz_batch = viz_batch * _std_ + _mean_
