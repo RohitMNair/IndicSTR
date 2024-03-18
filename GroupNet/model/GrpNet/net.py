@@ -90,7 +90,7 @@ class ViTGroupNet(DevanagariBaseSystem):
                                   if index not in (self.tokenizer.blank_id, self.tokenizer.pad_id, self.tokenizer.eos_id)]
         full_character_classes = [char for index, char in enumerate(self.tokenizer.f_c_classes) \
                                   if index not in (self.tokenizer.blank_id, self.tokenizer.pad_id, self.tokenizer.eos_id)]
-        diacritic_classes = [char for index, char in enumerate(self.tokenizer.h_c_classes) \
+        diacritic_classes = [char for index, char in enumerate(self.tokenizer.d_classes) \
                             if index not in (self.tokenizer.pad_id, self.tokenizer.eos_id)]
         loaded_dict = torch.load(self.emb_path, map_location= torch.device(self.device))
 
@@ -164,8 +164,6 @@ class FocalGroupNet(DevanagariBaseSystem):
         # non parameteric attributes
         (self.h_c_2_emb, self.h_c_1_emb, 
          self.f_c_emb, self.d_emb) = self._extract_char_embeddings()   
-        
-        self.intermediate_size = int(self.mlp_ratio * self.hidden_sizes[-1])
     
         self.encoder = FocalNetEncoder(
             hidden_dropout_prob= self.hidden_dropout_prob, 
@@ -215,7 +213,7 @@ class FocalGroupNet(DevanagariBaseSystem):
                                   if index not in (self.tokenizer.blank_id, self.tokenizer.pad_id, self.tokenizer.eos_id)]
         full_character_classes = [char for index, char in enumerate(self.tokenizer.f_c_classes) \
                                   if index not in (self.tokenizer.blank_id, self.tokenizer.pad_id, self.tokenizer.eos_id)]
-        diacritic_classes = [char for index, char in enumerate(self.tokenizer.h_c_classes) \
+        diacritic_classes = [char for index, char in enumerate(self.tokenizer.d_classes) \
                             if index not in (self.tokenizer.pad_id, self.tokenizer.eos_id)]
         loaded_dict = torch.load(self.emb_path, map_location= torch.device(self.device))
 
@@ -291,8 +289,6 @@ class FixedFocalGroupNet(DevanagariBaseSystem):
         self.h_c_1_emb = nn.Parameter(self.h_c_1_emb, requires_grad= False)
         self.f_c_emb = nn.Parameter(self.f_c_emb, requires_grad= False)
         self.d_emb = nn.Parameter(self.d_emb, requires_grad= False)
-        
-        self.intermediate_size = int(self.mlp_ratio * self.hidden_sizes[-1])
     
         self.encoder = FocalNetEncoder(
             hidden_dropout_prob= self.hidden_dropout_prob, 
@@ -349,7 +345,7 @@ class FixedFocalGroupNet(DevanagariBaseSystem):
                                   if index not in (self.tokenizer.blank_id, self.tokenizer.pad_id, self.tokenizer.eos_id)]
         full_character_classes = [char for index, char in enumerate(self.tokenizer.f_c_classes) \
                                   if index not in (self.tokenizer.blank_id, self.tokenizer.pad_id, self.tokenizer.eos_id)]
-        diacritic_classes = [char for index, char in enumerate(self.tokenizer.h_c_classes) \
+        diacritic_classes = [char for index, char in enumerate(self.tokenizer.d_classes) \
                             if index not in (self.tokenizer.pad_id, self.tokenizer.eos_id)]
         loaded_dict = torch.load(self.emb_path, map_location= torch.device(self.device))
 

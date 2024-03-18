@@ -13,5 +13,20 @@ svar: ['अ', 'आ', 'इ', 'ई', 'उ',
 matras: ['ा','ि','ी','ु','ू','ृ', 'े','ै', 'ो', 'ौ', 'ॅ', 'ॉ', 'ँ','ं', 'ः', '़']
 chinh: ['ॐ', '₹', '।', '!', '$', ',', '.', '-', '%', '॥','ॽ']
 ank: ['०','१','२','३','४','५','६' ,'७' ,'८' ,'९']
-nukthas: ['क़', 'ख़', 'ग़', 'ज़', 'ड़', 'ढ़', 'ऱ'] # half-char cannot contain matras so added here
 halanth: '्'
+
+datamodule:
+  _target_: data.module.LMDBDevanagariDataModule
+  train_dir: /home/rohitn/D1/HindiSynth/hindi_train_merged_lmdb
+  val_dir: /home/rohitn/D1/HindiSynth/hindi_val_merged_lmdb
+  test_dir: null
+  batch_size: 64 
+  num_workers: 8
+  drop_last: false
+  vyanjan: ${vyanjan}
+  svar: ${svar}
+  matras: ${matras}
+  chinh: ${chinh}
+  ank: ${ank}
+  halanth: ${halanth}
+  remove_unseen: false

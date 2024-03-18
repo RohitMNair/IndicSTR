@@ -14,42 +14,22 @@ model_load: # this won't be used if restart_training is false
   checkpoint_path: ${ckpt_path}
 
 defaults: # this wont be used if restart_training is true
-  - model: ViTSTR # Options are FocalSTR, ViTSTR, GrpNet, FocalPosVisNet, FocalGrpNet
-  - charset: devanagari
+  - model: FocalSTR # Options are FocalSTR, ViTSTR, GrpNet, FocalPosVisNet, FocalGrpNet
+  - data: hindi
   - _self_
 
 model:
-  vyanjan: ${charset.vyanjan}
-  svar: ${charset.svar}
-  matras: ${charset.matras}
-  chinh: ${charset.chinh}
-  ank: ${charset.ank}
-  nukthas: ${charset.nukthas}
-  halanth: ${charset.halanth}
+  vyanjan: ${data.vyanjan}
+  svar: ${data.svar}
+  matras: ${data.matras}
+  chinh: ${data.chinh}
+  ank: ${data.ank}
+  halanth: ${data.halanth}
 
 transforms:
   rotation: 60
   img_size: ${img_size}
   
-datamodule:
-  _target_: data.module.LMDBDevanagariDataModule
-  train_dir: /home/rohitn/D1/HindiSynth/hindi_train_merged_lmdb
-  val_dir: /home/rohitn/D1/HindiSynth/hindi_val_merged_lmdb
-  # train_dir: /home/rohitn/D1/HindiGlyphSynth/hindi_vertical_synth_lmdb
-  # val_dir: /home/rohitn/D1/HindiGlyphSynth/hindi_vertical_synth_val_lmdb
-  test_dir: null
-  batch_size: 64 
-  num_workers: 8
-  drop_last: false
-  vyanjan: ${charset.vyanjan}
-  svar: ${charset.svar}
-  matras: ${charset.matras}
-  chinh: ${charset.chinh}
-  ank: ${charset.ank}
-  nukthas: ${charset.nukthas}
-  halanth: ${charset.halanth}
-  remove_unseen: false
-
 csv_logger:
   _target_: lightning.pytorch.loggers.CSVLogger
   save_dir: ${log_dir} # Do not put "/" at the end

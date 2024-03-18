@@ -5,7 +5,7 @@ from utils.metrics import (DiacriticAccuracy, FullCharacterAccuracy, CharGrpAccu
                    HalfCharacterAccuracy, CombinedHalfCharAccuracy, WRR, WRR2, ComprihensiveWRR)
 from torch.optim import AdamW, Adam
 from torch.optim.lr_scheduler import OneCycleLR
-from data.tokenizer import MalayalamTokenizer, DevanagariTokenizer
+from data.tokenizer import MalayalamTokenizer, DevanagariTokenizer, HindiTokenizer
 import torch.nn as nn
 import torch
 import lightning.pytorch.loggers as pl_loggers
@@ -121,9 +121,9 @@ class FixedGrpClassifier(pl.LightningModule):
 
         return (half_char2_logits, half_char1_logts, full_char_logits, diac_logits)
 
-class HindiBaseSystem(pl.LightningModule):
+class MalayalamBaseSystem(pl.LightningModule):
     """
-    Base system for Hindi GroupNets STR
+    Base class for Malayalam GroupNets STR
     """
     def __init__(self, half_character_classes:list, full_character_classes:list,
                  diacritic_classes:list, halfer:str, max_grps:int, hidden_size:int,
@@ -132,13 +132,86 @@ class HindiBaseSystem(pl.LightningModule):
         super().__init__()
         self.max_grps = max_grps
         self.hidden_size = hidden_size
-        self.tokenizer = HindiTokenizer(
+        self.tokenizer = MalayalamTokenizer(
             half_character_classes= half_character_classes,
             full_character_classes= full_character_classes,
             diacritic_classes= diacritic_classes,
             halfer= halfer,
             threshold= threshold,
             max_grps= self.max_grps,
+        )
+        self.threshold = threshold
+        self.lr = learning_rate
+        self.weight_decay = weight_decay
+        self.pct_start = warmup_pct
+        
+        self.num_h_c_classes = len(self.tokenizer.h_c_classes)
+        self.num_f_c_classes = len(self.tokenizer.f_c_classes)
+        self.num_d_classes =  len(self.tokenizer.d_classes)
+
+        self.classifier = GrpClassifier(
+            hidden_size= self.hidden_size,
+            num_half_character_classes= self.num_h_c_classes,
+            num_full_character_classes= self.num_f_c_classes,
+            num_diacritic_classes= self.num_d_classes,
+        )
+
+        self.h_c_2_loss = nn.CrossEntropyLoss(reduction= 'mean', ignore_index= self.tokenizer.pad_id)
+        self.h_c_1_loss = nn.CrossEntropyLoss(reduction= 'mean', ignore_index= self.tokenizer.pad_id)
+        self.f_c_loss = nn.CrossEntropyLoss(reduction= 'mean', ignore_index= self.tokenizer.pad_id)
+        self.d_loss = nn.BCEWithLogitsLoss(reduction= 'mean')
+
+        # Trainig Metrics
+        self.train_h_c_2_acc = HalfCharacterAccuracy(threshold = self.threshold)
+        self.train_h_c_1_acc = HalfCharacterAccuracy(threshold = self.threshold)
+        self.train_comb_h_c_acc = CombinedHalfCharAccuracy(threshold= self.threshold)
+        self.train_f_c_acc = FullCharacterAccuracy(threshold = self.threshold)
+        self.train_d_acc = DiacriticAccuracy(threshold = self.threshold)
+        self.train_grp_acc = CharGrpAccuracy(threshold= self.threshold)
+        # self.train_wrr = ComprihensiveWRR(threshold= self.threshold)
+        self.train_wrr2 = WRR2(threshold= self.threshold)
+        # Validation Metrics
+        self.val_h_c_1_acc = HalfCharacterAccuracy(threshold = self.threshold)
+        self.val_h_c_2_acc = HalfCharacterAccuracy(threshold = self.threshold)
+        self.val_comb_h_c_acc = CombinedHalfCharAccuracy(threshold= self.threshold)
+        self.val_f_c_acc = FullCharacterAccuracy(threshold = self.threshold)
+        self.val_d_acc = DiacriticAccuracy(threshold = self.threshold)
+        self.val_grp_acc = CharGrpAccuracy(threshold= self.threshold)
+        # self.val_wrr = ComprihensiveWRR(threshold= self.threshold)
+        self.val_wrr2 = WRR2(threshold= self.threshold)
+        # Testing Metrics
+        self.test_h_c_1_acc = HalfCharacterAccuracy(threshold = self.threshold)
+        self.test_h_c_2_acc = HalfCharacterAccuracy(threshold = self.threshold)
+        self.test_comb_h_c_acc = CombinedHalfCharAccuracy(threshold= self.threshold)
+        self.test_f_c_acc = FullCharacterAccuracy(threshold = self.threshold)
+        self.test_d_acc = DiacriticAccuracy(threshold = self.threshold)
+        self.test_grp_acc = CharGrpAccuracy(threshold= self.threshold)
+        # self.test_wrr = ComprihensiveWRR(threshold= self.threshold)
+        self.test_wrr = WRR()
+        self.test_wrr2 = WRR2(threshold= self.threshold)
+        self.ned = NED()
+
+class DevanagariBaseSystem(pl.LightningModule):
+    """
+    Base system for Hindi GroupNets STR
+    """
+    def __init__(self, svar:list, vyanjan:list, matras:list, ank:list, chinh:list,
+                 nukthas:list, halanth:str, max_grps:int, hidden_size:int,
+                 threshold:float= 0.5, learning_rate: float= 1e-4,
+                 weight_decay: float= 1.0e-4, warmup_pct:float= 0.3):
+        super().__init__()
+        self.max_grps = max_grps
+        self.hidden_size = hidden_size
+        self.tokenizer = DevanagariTokenizer(
+            svar = svar,
+            vyanjan= vyanjan,
+            matras= matras,
+            ank= ank,
+            chinh= chinh,
+            nukthas= nukthas,
+            halanth= halanth,
+            threshold= threshold, 
+            max_grps= max_grps,
         )
         self.threshold = threshold
         self.lr = learning_rate
@@ -215,16 +288,15 @@ class HindiBaseSystem(pl.LightningModule):
         assert gt_labels is not None, "gt_labels cannot be none"
         assert pred_labels is not None, "pred_labels cannot be none"
         # Log the images (Give them different names)
-        for img_idx in range(viz_batch.shape[0]):
-            img = viz_batch[img_idx]
-            _mean_ = torch.tensor([0.485, 0.456, 0.406])
-            _std_ = torch.tensor([0.229, 0.224, 0.225])
-            mean_ = _mean_.view(1, 3, 1, 1).expand_as(img)
-            _std_ = _std_.view(1, 3, 1, 1).expand_as(img)
-
-            # Undo the normalization
-            unnorm_img = img * _std_ + _mean_
-            tb_logger.add_image(f"{mode}/{self.global_step}_pred-{pred_labels[img_idx]}_gt-{gt_labels[img_idx]}", unnorm_img, 0)
+        _mean_ = torch.tensor([0.485, 0.456, 0.406])
+        _std_ = torch.tensor([0.229, 0.224, 0.225])
+        _mean_ = _mean_.view(1, 3, 1, 1).expand_as(viz_batch)
+        _std_ = _std_.view(1, 3, 1, 1).expand_as(viz_batch)
+        unnorm_viz_batch = viz_batch * _std_ + _mean_
+        unnorm_viz_batch = torch.clamp(unnorm_viz_batch, 0, 1)
+        for img_idx in range(unnorm_viz_batch.shape[0]):
+            img = unnorm_viz_batch[img_idx]
+            tb_logger.add_image(f"{mode}/{self.global_step}_pred-{pred_labels[img_idx]}_gt-{gt_labels[img_idx]}", img, 0)
     
     def configure_optimizers(self)-> dict:
         optimizer = AdamW(params= self.parameters(), lr= self.lr, weight_decay= self.weight_decay)
@@ -484,94 +556,23 @@ class HindiBaseSystem(pl.LightningModule):
         pred_labels = self.tokenizer.decode((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits))
         return pred_labels, (h_c_2_logits, h_c_1_logits, f_c_logits, d_logits)
 
-class MalayalamBaseSystem(pl.LightningModule):
-    """
-    Base class for Malayalam GroupNets STR
-    """
-    def __init__(self, half_character_classes:list, full_character_classes:list,
-                 diacritic_classes:list, halfer:str, max_grps:int, hidden_size:int,
-                 threshold:float= 0.5, learning_rate: float= 1e-4,
-                 weight_decay: float= 1.0e-4, warmup_pct:float= 0.3):
-        super().__init__()
-        self.max_grps = max_grps
-        self.hidden_size = hidden_size
-        self.tokenizer = MalayalamTokenizer(
-            half_character_classes= half_character_classes,
-            full_character_classes= full_character_classes,
-            diacritic_classes= diacritic_classes,
-            halfer= halfer,
-            threshold= threshold,
-            max_grps= self.max_grps,
-        )
-        self.threshold = threshold
-        self.lr = learning_rate
-        self.weight_decay = weight_decay
-        self.pct_start = warmup_pct
-        
-        self.num_h_c_classes = len(self.tokenizer.h_c_classes)
-        self.num_f_c_classes = len(self.tokenizer.f_c_classes)
-        self.num_d_classes =  len(self.tokenizer.d_classes)
-
-        self.classifier = GrpClassifier(
-            hidden_size= self.hidden_size,
-            num_half_character_classes= self.num_h_c_classes,
-            num_full_character_classes= self.num_f_c_classes,
-            num_diacritic_classes= self.num_d_classes,
-        )
-
-        self.h_c_2_loss = nn.CrossEntropyLoss(reduction= 'mean', ignore_index= self.tokenizer.pad_id)
-        self.h_c_1_loss = nn.CrossEntropyLoss(reduction= 'mean', ignore_index= self.tokenizer.pad_id)
-        self.f_c_loss = nn.CrossEntropyLoss(reduction= 'mean', ignore_index= self.tokenizer.pad_id)
-        self.d_loss = nn.BCEWithLogitsLoss(reduction= 'mean')
-
-        # Trainig Metrics
-        self.train_h_c_2_acc = HalfCharacterAccuracy(threshold = self.threshold)
-        self.train_h_c_1_acc = HalfCharacterAccuracy(threshold = self.threshold)
-        self.train_comb_h_c_acc = CombinedHalfCharAccuracy(threshold= self.threshold)
-        self.train_f_c_acc = FullCharacterAccuracy(threshold = self.threshold)
-        self.train_d_acc = DiacriticAccuracy(threshold = self.threshold)
-        self.train_grp_acc = CharGrpAccuracy(threshold= self.threshold)
-        # self.train_wrr = ComprihensiveWRR(threshold= self.threshold)
-        self.train_wrr2 = WRR2(threshold= self.threshold)
-        # Validation Metrics
-        self.val_h_c_1_acc = HalfCharacterAccuracy(threshold = self.threshold)
-        self.val_h_c_2_acc = HalfCharacterAccuracy(threshold = self.threshold)
-        self.val_comb_h_c_acc = CombinedHalfCharAccuracy(threshold= self.threshold)
-        self.val_f_c_acc = FullCharacterAccuracy(threshold = self.threshold)
-        self.val_d_acc = DiacriticAccuracy(threshold = self.threshold)
-        self.val_grp_acc = CharGrpAccuracy(threshold= self.threshold)
-        # self.val_wrr = ComprihensiveWRR(threshold= self.threshold)
-        self.val_wrr2 = WRR2(threshold= self.threshold)
-        # Testing Metrics
-        self.test_h_c_1_acc = HalfCharacterAccuracy(threshold = self.threshold)
-        self.test_h_c_2_acc = HalfCharacterAccuracy(threshold = self.threshold)
-        self.test_comb_h_c_acc = CombinedHalfCharAccuracy(threshold= self.threshold)
-        self.test_f_c_acc = FullCharacterAccuracy(threshold = self.threshold)
-        self.test_d_acc = DiacriticAccuracy(threshold = self.threshold)
-        self.test_grp_acc = CharGrpAccuracy(threshold= self.threshold)
-        # self.test_wrr = ComprihensiveWRR(threshold= self.threshold)
-        self.test_wrr = WRR()
-        self.test_wrr2 = WRR2(threshold= self.threshold)
-        self.ned = NED()
-
-class DevanagariBaseSystem(pl.LightningModule):
+class HindiBaseSystem(pl.LightningModule):
     """
     Base system for Hindi GroupNets STR
     """
     def __init__(self, svar:list, vyanjan:list, matras:list, ank:list, chinh:list,
-                 nukthas:list, halanth:str, max_grps:int, hidden_size:int,
+                 halanth:str, max_grps:int, hidden_size:int,
                  threshold:float= 0.5, learning_rate: float= 1e-4,
                  weight_decay: float= 1.0e-4, warmup_pct:float= 0.3):
         super().__init__()
         self.max_grps = max_grps
         self.hidden_size = hidden_size
-        self.tokenizer = DevanagariTokenizer(
+        self.tokenizer = HindiTokenizer(
             svar = svar,
             vyanjan= vyanjan,
             matras= matras,
             ank= ank,
             chinh= chinh,
-            nukthas= nukthas,
             halanth= halanth,
             threshold= threshold, 
             max_grps= max_grps,
