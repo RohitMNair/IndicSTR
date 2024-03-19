@@ -3,8 +3,8 @@ from model.ViTSTR.encoder import ViTEncoder
 from .decoder import GroupDecoder
 from typing import Tuple
 from torch import Tensor
-from Img2Vec.GroupNet.model.base import DevanagariBaseSystem, HindiBaseSystem
-from Img2Vec.GroupNet.model.head import FixedGrpClassifier
+from model.base import DevanagariBaseSystem, HindiBaseSystem
+from model.head import FixedGrpClassifier
 
 import torch
 import torch.nn as nn

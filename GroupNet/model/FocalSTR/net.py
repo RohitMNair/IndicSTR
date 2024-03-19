@@ -1,6 +1,6 @@
 from .encoder import FocalNetEncoder
-from Img2Vec.GroupNet.model.base import HindiBaseSystem, DevanagariBaseSystem
-from Img2Vec.GroupNet.model.head import FixedGrpClassifier
+from model.base import HindiBaseSystem, DevanagariBaseSystem
+from model.head import FixedGrpClassifier
 from typing import Tuple
 from torch import Tensor
 

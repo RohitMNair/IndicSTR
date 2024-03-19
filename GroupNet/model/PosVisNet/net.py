@@ -1,7 +1,7 @@
 from model.FocalSTR.encoder import FocalNetEncoder
 from model.ViTSTR.encoder import ViTEncoder
 from .decoder import PosVisDecoder
-from Img2Vec.GroupNet.model.base import DevanagariBaseSystem, HindiBaseSystem
+from model.base import DevanagariBaseSystem, HindiBaseSystem
 from torch import Tensor
 from typing import Tuple
 import lightning.pytorch as pl
