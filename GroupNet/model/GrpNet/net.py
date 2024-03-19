@@ -3,14 +3,14 @@ from model.ViTSTR.encoder import ViTEncoder
 from .decoder import GroupDecoder
 from typing import Tuple
 from torch import Tensor
-from model.commons import FixedGrpClassifier, DevanagariBaseSystem
+from Img2Vec.GroupNet.model.base import DevanagariBaseSystem, HindiBaseSystem
+from Img2Vec.GroupNet.model.head import FixedGrpClassifier
 
 import torch
 import torch.nn as nn
 
-class ViTGroupNet(DevanagariBaseSystem):
-    def __init__(self, emb_path:str, svar:list, vyanjan:list, matras:list, ank:list, chinh:list,
-                 nukthas:list, halanth:str, hidden_size: int = 768,
+class HindiViTGroupNet(HindiBaseSystem):
+    def __init__(self, emb_path:str, hidden_size: int = 768,
                  num_hidden_layers: int = 12, num_attention_heads: int = 12,
                  mlp_ratio: float= 4.0, hidden_dropout_prob: float = 0.0,
                  attention_probs_dropout_prob: float = 0.0, initializer_range: float = 0.02,
@@ -18,9 +18,7 @@ class ViTGroupNet(DevanagariBaseSystem):
                  num_channels: int = 3, qkv_bias: bool = True, max_grps: int = 25, threshold:float= 0.5,
                  learning_rate: float= 1e-4, weight_decay: float= 1.0e-4, warmup_pct:float= 0.3
                  ):
-        super().__init__(svar = svar, vyanjan= vyanjan, matras= matras, ank= ank, chinh= chinh, 
-                         nukthas= nukthas, halanth= halanth, max_grps= max_grps,
-                         hidden_size= hidden_size, threshold= threshold, learning_rate= learning_rate,
+        super().__init__(max_grps= max_grps, hidden_size= hidden_size, threshold= threshold, learning_rate= learning_rate,
                          weight_decay= weight_decay, warmup_pct= warmup_pct)
         self.save_hyperparameters()
         self.emb_path = emb_path
@@ -119,12 +117,11 @@ class ViTGroupNet(DevanagariBaseSystem):
         h_c_2_logits, h_c_1_logits, f_c_logits, d_logits = self.classifier(dec_x)
         return (h_c_2_logits, h_c_1_logits, f_c_logits, d_logits)
     
-class FocalGroupNet(DevanagariBaseSystem):
+class HindiFocalGroupNet(HindiBaseSystem):
     """
     GrpNet with FocalNet as Visual backbone
     """
-    def __init__(self, emb_path:str, svar:list, vyanjan:list, matras:list, ank:list, chinh:list,
-                 nukthas:list, halanth:str, embed_dim: int = 96, depths:list= [2, 2, 6, 2], 
+    def __init__(self, emb_path:str, embed_dim: int = 96, depths:list= [2, 2, 6, 2], 
                  focal_levels:list= [3, 3, 3, 3], focal_windows:list= [3, 3, 3, 3], 
                  drop_path_rate:float= 0.1, mlp_ratio: float= 4.0, 
                  hidden_dropout_prob: float = 0.0, attention_probs_dropout_prob: float = 0.0, 
@@ -139,9 +136,7 @@ class FocalGroupNet(DevanagariBaseSystem):
         - emb_path (str):
         """
         self.hidden_sizes = [embed_dim * (2 ** i) for i in range(len(depths))]
-        super().__init__(svar = svar, vyanjan= vyanjan, matras= matras, ank= ank, chinh= chinh, 
-                         nukthas= nukthas, halanth= halanth, max_grps= max_grps,
-                         hidden_size= self.hidden_sizes[-1], threshold= threshold,
+        super().__init__(max_grps= max_grps, hidden_size= self.hidden_sizes[-1], threshold= threshold,
                          learning_rate= learning_rate, weight_decay= weight_decay, warmup_pct= warmup_pct)
         self.save_hyperparameters()
         self.emb_path = emb_path

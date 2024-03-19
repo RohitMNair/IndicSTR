@@ -1,21 +1,19 @@
 from model.FocalSTR.encoder import FocalNetEncoder
 from model.ViTSTR.encoder import ViTEncoder
 from .decoder import PosVisDecoder
-from model.commons import DevanagariBaseSystem
+from Img2Vec.GroupNet.model.base import DevanagariBaseSystem, HindiBaseSystem
 from torch import Tensor
 from typing import Tuple
 import lightning.pytorch as pl
 import torch
 import torch.nn as nn
 
-class ViTPosVisNet(DevanagariBaseSystem):
+class HindiViTPosVisNet(HindiBaseSystem):
     """
     Encoder Decoder Transformer network that performs Position-Visual attention on 
     visual representations of the encoder (ViT) and decodes characters
     """
-    def __init__(self, svar:list, vyanjan:list, matras:list, ank:list, chinh:list,
-                 nukthas:list, halanth:str, hidden_size: int = 768,
-                 num_hidden_layers: int = 12, num_decoder_layers: int= 1, num_attention_heads: int = 12,
+    def __init__(self, hidden_size: int = 768, num_hidden_layers: int = 12, num_decoder_layers: int= 1, num_attention_heads: int = 12,
                  mlp_ratio: float= 4.0, hidden_dropout_prob: float = 0.0,
                  attention_probs_dropout_prob: float = 0.0, initializer_range: float = 0.02,
                  layer_norm_eps: float = 1e-12, image_size: int = 224, patch_size: int = 16, 
@@ -25,10 +23,6 @@ class ViTPosVisNet(DevanagariBaseSystem):
         """
         Constructor for PosVisNet
         Args:
-        - half_character_classes (list): list of half characters
-        - full_character_classes (list): list of full character
-        - diacritic_classes (list): list of diacritic
-        - halfer (str): the halfer character
         - hidden_size (int, default= 768): Hidden size of the model
         - num_hidden_layers (int, default= 12): # of hidden layers for the ViT Encoder
         - num_decoder_layers (int, default= 1): # of decoder (PosVisDecoder) layers
@@ -50,9 +44,7 @@ class ViTPosVisNet(DevanagariBaseSystem):
         - warmup_pct (float, default= 0.3): The percentage of the cycle (in number of steps) 
                                             spent increasing the learning rate for OneCyleLR
         """
-        super().__init__(svar = svar, vyanjan= vyanjan, matras= matras, ank= ank, chinh= chinh, 
-                         nukthas= nukthas, halanth= halanth, max_grps= max_grps,
-                         hidden_size= hidden_size, threshold= threshold, learning_rate= learning_rate,
+        super().__init__(max_grps= max_grps, hidden_size= hidden_size, threshold= threshold, learning_rate= learning_rate,
                          weight_decay= weight_decay, warmup_pct= warmup_pct)
         self.save_hyperparameters()
         self.num_hidden_layers = num_hidden_layers
@@ -112,13 +104,12 @@ class ViTPosVisNet(DevanagariBaseSystem):
         h_c_2_logits, h_c_1_logits, f_c_logits, d_logits = self.classifier(dec_x)
         return (h_c_2_logits, h_c_1_logits, f_c_logits, d_logits)
 
-class FocalPosVisNet(DevanagariBaseSystem):
+class HindiFocalPosVisNet(HindiBaseSystem):
     """
     Encoder Decoder Transformer network that performs Position-Visual attention on 
     visual representations of the encoder (ViT) and decodes characters
     """
-    def __init__(self, svar:list, vyanjan:list, matras:list, ank:list, chinh:list,
-                 nukthas:list, halanth:str, embed_dim: int = 96, depths:list= [2, 2, 6, 2],
+    def __init__(self, embed_dim: int = 96, depths:list= [2, 2, 6, 2],
                  focal_levels:list= [2, 2, 2, 2], focal_windows:list= [3, 3, 3, 3], 
                  drop_path_rate:float= 0.1, mlp_ratio: float= 4.0, 
                  hidden_dropout_prob: float = 0.0, attention_probs_dropout_prob: float = 0.0, 
@@ -130,10 +121,6 @@ class FocalPosVisNet(DevanagariBaseSystem):
         """
         Constructor for PosVisNet
         Args:
-        - half_character_classes (list(str)): list of half characters
-        - full_character_classes (list(str)): list of full character
-        - diacritic_classes (list(str)): list of diacritic
-        - halfer (str): the halfer character
         - embed_dim (int, default= 96): Dimensionality of patch embedding.
         - depths (list(int), default= [2, 2, 6, 2]): Depth (number of layers) of each stage in the encoder.
         - focal_levels (list(int), default= [2, 2, 2, 2]): Number of focal levels in each layer of the respective stages in the encoder.
@@ -160,9 +147,7 @@ class FocalPosVisNet(DevanagariBaseSystem):
         self.save_hyperparameters()
         self.embed_dim = embed_dim
         self.hidden_sizes = [self.embed_dim * (2 ** i) for i in range(len(depths))]
-        super().__init__(svar = svar, vyanjan= vyanjan, matras= matras, ank= ank, chinh= chinh, 
-                         nukthas= nukthas, halanth= halanth, max_grps= max_grps,
-                         hidden_size= self.hidden_sizes[-1], threshold= threshold, learning_rate= learning_rate,
+        super().__init__(max_grps= max_grps, hidden_size= self.hidden_sizes[-1], threshold= threshold, learning_rate= learning_rate,
                          weight_decay= weight_decay, warmup_pct= warmup_pct)
         self.depths = depths
         self.focal_levels = focal_levels

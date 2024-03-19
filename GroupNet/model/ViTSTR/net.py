@@ -1,5 +1,5 @@
 from .encoder import ViTEncoder
-from model.commons import DevanagariBaseSystem
+from Img2Vec.GroupNet.model.base import DevanagariBaseSystem
 from typing import Tuple
 from torch import Tensor
 

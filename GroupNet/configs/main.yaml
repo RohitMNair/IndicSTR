@@ -15,16 +15,18 @@ model_load: # this won't be used if restart_training is false
 
 defaults: # this wont be used if restart_training is true
   - model: FocalSTR # Options are FocalSTR, ViTSTR, GrpNet, FocalPosVisNet, FocalGrpNet
-  - data: hindi
   - _self_
 
-model:
-  vyanjan: ${data.vyanjan}
-  svar: ${data.svar}
-  matras: ${data.matras}
-  chinh: ${data.chinh}
-  ank: ${data.ank}
-  halanth: ${data.halanth}
+datamodule:
+  _target_: data.module.LMDBDataModule
+  train_dir: /home/rohitn/D1/HindiSynth/hindi_train_merged_lmdb
+  val_dir: /home/rohitn/D1/HindiSynth/hindi_val_merged_lmdb
+  test_dir: null
+  batch_size: 64 
+  num_workers: 8
+  drop_last: false
+  language: hindi
+  remove_unseen: false
 
 transforms:
   rotation: 60

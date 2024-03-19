@@ -1,5 +1,6 @@
 from .encoder import FocalNetEncoder
-from model.commons import HindiBaseSystem, DevanagariBaseSystem, FixedGrpClassifier
+from Img2Vec.GroupNet.model.base import HindiBaseSystem, DevanagariBaseSystem
+from Img2Vec.GroupNet.model.head import FixedGrpClassifier
 from typing import Tuple
 from torch import Tensor
 
@@ -10,8 +11,7 @@ class DevanagariFocalSTR(DevanagariBaseSystem):
     """
     Group implementation of ViTSTR but instead of ViT, we use FocalNet
     """
-    def __init__(self, svar:list, vyanjan:list, matras:list, ank:list, chinh:list,
-                 nukthas:list, halanth:str, embed_dim: int = 96, depths:list= [2, 2, 6, 2],
+    def __init__(self, embed_dim: int = 96, depths:list= [2, 2, 6, 2],
                  focal_levels:list= [2, 2, 2, 2], focal_windows:list= [3, 3, 3, 3],
                  mlp_ratio: float= 4.0, hidden_dropout_prob: float = 0.0,
                  drop_path_rate:float = 0.1, initializer_range: float = 0.02, 
@@ -21,10 +21,8 @@ class DevanagariFocalSTR(DevanagariBaseSystem):
         self.save_hyperparameters()
         self.embed_dim = embed_dim
         self.hidden_sizes = [self.embed_dim * (2 ** i) for i in range(len(depths))] 
-        super().__init__(svar = svar, vyanjan= vyanjan, matras= matras, ank= ank, chinh= chinh, 
-                         nukthas= nukthas, halanth= halanth, max_grps= 16, # FocalNet returns just 16 Vectors per image
-                         hidden_size= self.hidden_sizes[-1], threshold= threshold, learning_rate= learning_rate,
-                         weight_decay= weight_decay, warmup_pct= warmup_pct)
+        super().__init__(max_grps= 16, hidden_size= self.hidden_sizes[-1], threshold= threshold,
+                         learning_rate= learning_rate, weight_decay= weight_decay, warmup_pct= warmup_pct)
         self.depths = depths
         self.focal_levels = focal_levels
         self.focal_windows = focal_windows
@@ -60,8 +58,7 @@ class DevanagariFocalSTR(DevanagariBaseSystem):
         return (h_c_2_logits, h_c_1_logits, f_c_logits, d_logits)
     
 class HindiFocalSTR(HindiBaseSystem):
-    def __init__(self, svar:list, vyanjan:list, matras:list, ank:list, chinh:list,
-                 halanth:str, embed_dim: int = 96, depths:list= [2, 2, 6, 2],
+    def __init__(self, embed_dim: int = 96, depths:list= [2, 2, 6, 2],
                  focal_levels:list= [2, 2, 2, 2], focal_windows:list= [3, 3, 3, 3],
                  mlp_ratio: float= 4.0, hidden_dropout_prob: float = 0.0,
                  drop_path_rate:float = 0.1, initializer_range: float = 0.02, 
@@ -71,10 +68,8 @@ class HindiFocalSTR(HindiBaseSystem):
         self.save_hyperparameters()
         self.embed_dim = embed_dim
         self.hidden_sizes = [self.embed_dim * (2 ** i) for i in range(len(depths))] 
-        super().__init__(svar = svar, vyanjan= vyanjan, matras= matras, ank= ank, chinh= chinh, 
-                         halanth= halanth, max_grps= 16, # FocalNet returns just 16 Vectors per image
-                         hidden_size= self.hidden_sizes[-1], threshold= threshold, learning_rate= learning_rate,
-                         weight_decay= weight_decay, warmup_pct= warmup_pct)
+        super().__init__(max_grps= 16, hidden_size= self.hidden_sizes[-1], threshold= threshold,
+                         learning_rate= learning_rate, weight_decay= weight_decay, warmup_pct= warmup_pct)
         self.depths = depths
         self.focal_levels = focal_levels
         self.focal_windows = focal_windows
@@ -110,8 +105,7 @@ class HindiFocalSTR(HindiBaseSystem):
         return (h_c_2_logits, h_c_1_logits, f_c_logits, d_logits)
 
 class HindiFixedFocalSTR(HindiBaseSystem):
-    def __init__(self, svar:list, vyanjan:list, matras:list, ank:list, chinh:list,
-                 halanth:str, emb_path:str, embed_dim: int = 96, depths:list= [2, 2, 6, 2],
+    def __init__(self, emb_path:str, embed_dim: int = 96, depths:list= [2, 2, 6, 2],
                  focal_levels:list= [2, 2, 2, 2], focal_windows:list= [3, 3, 3, 3],
                  mlp_ratio: float= 4.0, hidden_dropout_prob: float = 0.0,
                  drop_path_rate:float = 0.1, initializer_range: float = 0.02, 
@@ -121,10 +115,8 @@ class HindiFixedFocalSTR(HindiBaseSystem):
         self.save_hyperparameters()
         self.embed_dim = embed_dim
         self.hidden_sizes = [self.embed_dim * (2 ** i) for i in range(len(depths))] 
-        super().__init__(svar = svar, vyanjan= vyanjan, matras= matras, ank= ank, chinh= chinh, 
-                         halanth= halanth, max_grps= 16, # FocalNet returns just 16 Vectors per image
-                         hidden_size= self.hidden_sizes[-1], threshold= threshold, learning_rate= learning_rate,
-                         weight_decay= weight_decay, warmup_pct= warmup_pct)
+        super().__init__(max_grps= 16, hidden_size= self.hidden_sizes[-1], threshold= threshold, 
+                         learning_rate= learning_rate, weight_decay= weight_decay, warmup_pct= warmup_pct)
         self.emb_path = emb_path
         self.depths = depths
         self.focal_levels = focal_levels

@@ -39,7 +39,7 @@ def main(cfg: DictConfig):
         ),
         ])
 
-    datamodule = instantiate(cfg.data.datamodule, transforms = composed, test_transforms = test_composed)
+    datamodule = instantiate(cfg.datamodule, transforms = composed, test_transforms = test_composed)
 
     csv_logger = instantiate(cfg.csv_logger)
     tensorboard_logger = instantiate(cfg.tensorboard_logger)

@@ -1,15 +1,15 @@
-from Img2Vec.GroupNet.data.tokenizer import DevanagariTokenizer, MalayalamTokenizer
+from Img2Vec.GroupNet.data.tokenizer import DevanagariTokenizer, MalayalamTokenizer, HindiTokenizer
 from typing import Union
 import unicodedata
 import yaml
 import argparse
 
-def select_tokenizer(charset:str)->Union[DevanagariTokenizer, MalayalamTokenizer]:
+def select_tokenizer(charset:str)->Union[DevanagariTokenizer, MalayalamTokenizer, HindiTokenizer]:
     """
     Returns an instantiated tokenizer for the language
     """
     data = None
-    with open(f"Img2Vec/GroupNet/configs/charset/{charset}.yaml", 'r') as yaml_file:
+    with open(f"Img2Vec/GroupNet/configs/data/{charset}.yaml", 'r') as yaml_file:
         data = yaml.load(yaml_file, Loader=yaml.FullLoader)
 
     if charset == 'devanagari':
@@ -19,11 +19,28 @@ def select_tokenizer(charset:str)->Union[DevanagariTokenizer, MalayalamTokenizer
             matras= data['matras'],
             ank= data['ank'],
             chinh= data['chinh'],
-            nukthas= data['nukthas'],
+            halanth= data['halanth'],
+        )
+    elif charset == 'hindi':
+        return HindiTokenizer(
+            svar= data['svar'],
+            vyanjan= data['vyanjan'],
+            matras= data['matras'],
+            ank= data['ank'],
+            chinh= data['chinh'],
+            halanth= data['halanth'],
+        )
+    elif charset == 'malayalam':
+        return MalayalamTokenizer(
+            svar= data['svar'],
+            vyanjan= data['vyanjan'],
+            matras= data['matras'],
+            ank= data['ank'],
+            chinh= data['chinh'],
             halanth= data['halanth'],
         )
     else:
-        raise NotImplementedError("Malayalam hasn't been implemented yet")
+        raise NotImplementedError("Language hasn't been implemented yet")
         
 def extract_unique_words(input_file:str, output_file:str,\
                           tokenizer:Union[DevanagariTokenizer, MalayalamTokenizer])-> None:
