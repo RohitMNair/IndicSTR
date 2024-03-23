@@ -1,24 +1,18 @@
 import argparse
 import yaml
-from Img2Vec.GroupNet.data.tokenizer import DevanagariTokenizer, MalayalamTokenizer
+from Img2Vec.GroupNet.data.tokenizer import DevanagariTokenizer, MalayalamTokenizer, HindiTokenizer
 
 def freq_counter(gt_file_path:str, charset:str, is_gt:bool = True):
     ngrp_freq = {}
     tokenizer = None
-    with open(f"Img2Vec/GroupNet/configs/charset/{charset}.yaml", 'r') as yaml_file:
-        data = yaml.load(yaml_file, Loader=yaml.FullLoader)
 
-    if charset == 'devanagari':
-        tokenizer= DevanagariTokenizer(
-            svar= data['svar'],
-            vyanjan= data['vyanjan'],
-            matras= data['matras'],
-            ank= data['ank'],
-            chinh= data['chinh'],
-            nukthas= data['nukthas'],
-            halanth= data['halanth'],
-        )
-    else :
+    if charset.lower() == 'devanagari':
+        tokenizer= DevanagariTokenizer()
+    elif charset.lower() == 'hindi':
+        tokenizer= HindiTokenizer()
+    elif charset.lower() == 'malayalam' :
+        tokenizer = MalayalamTokenizer()
+    else:
         raise NotImplementedError("Language Not implemented")
     
     char_frq = {c:0 for c in tokenizer.get_charset()}

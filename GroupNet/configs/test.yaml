@@ -9,12 +9,14 @@ model:
   checkpoint_path: ${ckpt_root}/${ckpt_filename}
   
 datamodule:
-  _target_: data.module.LMDBHindiDataModule
+  _target_: data.module.LMDBDataModule
   test_dir: /home/rohitn/D1/indicstr12/hindi_lmdb_fixed
   batch_size: 64 
   num_workers: 8
   drop_last: false
   remove_unseen: true
+  language: hindi
+
 
 csv_logger:
   _target_: lightning.pytorch.loggers.CSVLogger

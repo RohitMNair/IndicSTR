@@ -18,7 +18,7 @@ class HindiTokenizer:
         - half_character_set (list)
         - full_character_set (list)
         - diacritic_set (list)
-        - halfer (str): diacritic used to represent a half-character
+        - halanth (str): diacritic used to represent a half-character
         - threshold (float): classification threshold (default: 0.5)
         """
         self.vyanjan = ['क', 'ख', 'ग', 'घ', 'ङ',
@@ -69,13 +69,16 @@ class HindiTokenizer:
         self.f_c_classes = tuple([unicodedata.normalize("NFKD", c) for c in self.f_c_classes])
         self.d_classes = tuple([unicodedata.normalize("NFKD", c) for c in self.d_classes])
     
+    def get_charset(self)-> list:
+        return self.h_c_classes + self.f_c_classes + self.d_classes
+    
     def _check_h_c(self, label:str, idx:int)-> bool:
         """
         Method to check if the character at index idx in label is a half-char or not
         Returns:
         - bool: True if the current index is a half character or not
         """
-        # check if the current char is in h_c_set and next char is halfer
+        # check if the current char is in h_c_set and next char is halanth
         return idx < len(label) and label[idx] in self.rev_h_c_label_map \
             and idx + 1 < len(label) and label[idx + 1] == self.halanth
 
@@ -86,7 +89,7 @@ class HindiTokenizer:
         - bool: True if the current idx is a full character
         """
         # check if the current char is in f_c_set and 
-        # it is the last char of label or the following char is not halfer
+        # it is the last char of label or the following char is not halanth
         return idx < len(label) and label[idx] in self.rev_f_c_label_map \
             and (idx + 1 >= len(label) or label[idx + 1] != self.halanth)
 
@@ -217,7 +220,7 @@ class HindiTokenizer:
                                                                 )
                                                             )
         for i, char in enumerate(grp):
-            halfer_cntr = 0
+            halanth_cntr = 0
             if char in self.rev_h_c_label_map and i + 1 < len(grp) and grp[i+1] == self.halanth:
                     # for half character occurence
                     if h_c_1_target == self.blank_id:
@@ -243,10 +246,10 @@ class HindiTokenizer:
                 
                 d_target[self.rev_d_label_map[char]] = 1.
 
-            elif char == self.halanth and halfer_cntr < 2:
-                halfer_cntr += 1
+            elif char == self.halanth and halanth_cntr < 2:
+                halanth_cntr += 1
 
-            elif char == self.halanth and halfer_cntr >=2 :
+            elif char == self.halanth and halanth_cntr >=2 :
                 raise Exception(f"More than 2 half-characters occured")
 
             else:
@@ -817,9 +820,10 @@ class MalayalamTokenizer:
                         'പ', 'ഫ', 'ബ', 'ഭ', 'മ',
                         'യ', 'ര', 'ല', 'വ', 'ശ',
                         'ഷ', 'സ', 'ഹ', 'ള', 'ഴ', 'റ']
+        self.matras = ['ാ', 'ി', 'ീ', 'ു', 'ൂ', 'ൃ', 'ൈ', 'ൊ', 'ോ', 'ൗ', 'ൌ', 'െ', 'േ', 'ം', 'ഃ', '഻']
         # halanth is also referred as chandrakala in malayalam
         self.halanth = '്'
-        self.chihn =  ['ഓം', '₹', '।', '!', '$', '%', '?', '.', ',', "-", '(', ')']
+        self.chinh =  ['₹', '।', '!', '$', '%', '?', '.', ',', "-", '(', ')']
         self.ank = ['൦', '൧', '൨', '൩', '൪', '൫', '൬', '൭', '൮', '൯']  # numbers
 
         self.chillaksharam = ['ൺ', 'ൻ', 'ർ', 'ൽ', 'ൾ']
@@ -855,11 +859,15 @@ class MalayalamTokenizer:
     
     def _normalize_charset(self)-> None:
         """
-        Function to normalize the charset provided and converts the charset from list to tuple
+        NFKD Normalize the input charset 
         """
-        self.h_c_classes = tuple([unicodedata.normalize("NFKD", c) for c in self.h_c_classes])
-        self.f_c_classes = tuple([unicodedata.normalize("NFKD", c) for c in self.f_c_classes])
-        self.d_classes = tuple([unicodedata.normalize("NFKD", c) for c in self.d_classes])
+        self.ank = [unicodedata.normalize("NFKD", char) for char in self.ank]
+        self.chinh = [unicodedata.normalize("NFKD", char) for char in self.chinh]
+        self.svar = [unicodedata.normalize("NFKD", char) for char in self.svar]
+        self.vyanjan = [unicodedata.normalize("NFKD", char) for char in self.vyanjan]
+        self.matras = [unicodedata.normalize("NFKD", char) for char in self.matras]
+        self.chillaksharam = [unicodedata.normalize("NFKD", char) for char in self.chillaksharam]
+        self.special_matra = [unicodedata.normalize("NFKD", char) for char in self.special_matra]
 
     def _check_h_c(self, label: str, idx: int) -> bool:
         """
@@ -867,8 +875,8 @@ class MalayalamTokenizer:
         Returns:
         - bool: True if the current index is a half character or not
         """
-        # check if the current char is in h_c_set and next char is halfer
-        return idx < len(label) and label[idx] in self.rev_h_c_label_map and idx + 1 < len(label) and label[idx + 1] == self.halfer
+        # check if the current char is in h_c_set and next char is halanth
+        return idx < len(label) and label[idx] in self.rev_h_c_label_map and idx + 1 < len(label) and label[idx + 1] == self.halanth
 
     def _check_f_c(self, label, idx):
         """
@@ -877,9 +885,9 @@ class MalayalamTokenizer:
         - bool: True if the current idx is a full character
         """
         # check if the current char is in f_c_set and
-        # it is the last char of label or the following char is not halfer
+        # it is the last char of label or the following char is not halanth
         return idx < len(label) and label[idx] in self.rev_f_c_label_map \
-            and (idx + 1 >= len(label) or label[idx + 1] != self.halfer)
+            and (idx + 1 >= len(label) or label[idx + 1] != self.halanth)
 
     def _check_vyanjan(self, label, idx):
         """
@@ -888,9 +896,9 @@ class MalayalamTokenizer:
         - bool: True if the current idx is a vyanjan
         """
         # check if the current char is in f_c_set and
-        # it is the last char of label or the following char is not halfer
+        # it is the last char of label or the following char is not halanth
         return idx < len(label) and label[idx] in self.vyanjan \
-            and (idx + 1 >= len(label) or label[idx + 1] != self.halfer)
+            and (idx + 1 >= len(label) or label[idx + 1] != self.halanth)
 
     def _check_d_c(self, label, idx):
         """
@@ -901,7 +909,7 @@ class MalayalamTokenizer:
         # check if the char belongs in d_c_set
         return idx < len(label) and label[idx] in self.rev_d_label_map
 
-    def mal_grp_sanity(self, label: str, grps: tuple) -> bool:
+    def grp_sanity(self, label: str, grps: tuple) -> bool:
         """
         Checks whether the groups are properly formed
         for Malayalam, each group should contain:
@@ -934,7 +942,7 @@ class MalayalamTokenizer:
                         f_c_count -= 1
                         i += 1
                 else:
-                    if i + 1 < len(grp) and self.halfer == grp[i + 1] and grp[i] in self.rev_h_c_label_map and h_c_count > 0:
+                    if i + 1 < len(grp) and self.halanth == grp[i + 1] and grp[i] in self.rev_h_c_label_map and h_c_count > 0:
                         h_c_count -= 1
                         i += 1
                     elif grp[i] in self.rev_h_c_label_map and f_c_count > 0:
@@ -960,14 +968,14 @@ class MalayalamTokenizer:
                         return False
                     i += 1
             if f_c_count == 1 or (h_c_count, f_c_count, d_c_count) == (3, 1, 2):
-                if grp[len(grp)-1:] == self.halfer:
+                if grp[len(grp)-1:] == self.halanth:
                     return True
                 print(
                     f"There are no full character in group {grp} for {label} at {grps} OR")
                 return False
         return True
 
-    def mal_label_transform(self, label: str) -> tuple:
+    def label_transform(self, label: str) -> tuple:
         """
         Transform malayalam labels into groups
         Args:
@@ -999,7 +1007,7 @@ class MalayalamTokenizer:
                 # half-char is followed by full character which is just vyanjan
                 f_c_flag = False
                 if self._check_f_c(label, idx) and label[idx] not in self.chillaksharam:
-                    if label[idx] not in self.ank_chin:
+                    if label[idx] not in (self.ank + self.chinh):
                         f_c_flag = True
                     # checks for 1 full character
                     running_grp += label[idx]
@@ -1033,7 +1041,7 @@ class MalayalamTokenizer:
             if running_grp != "":
                 grps = grps + (running_grp, )
             running_grp = ""
-        return grps if self.mal_grp_sanity(label, grps) else ()
+        return grps if self.grp_sanity(label, grps) else ()
     
     def grp_class_encoder(self, grp: str)-> Tuple[int, int, int, Tensor]:
         """

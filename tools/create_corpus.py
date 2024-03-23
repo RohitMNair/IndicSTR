@@ -8,37 +8,12 @@ def select_tokenizer(charset:str)->Union[DevanagariTokenizer, MalayalamTokenizer
     """
     Returns an instantiated tokenizer for the language
     """
-    data = None
-    with open(f"Img2Vec/GroupNet/configs/data/{charset}.yaml", 'r') as yaml_file:
-        data = yaml.load(yaml_file, Loader=yaml.FullLoader)
-
     if charset == 'devanagari':
-        return DevanagariTokenizer(
-            svar= data['svar'],
-            vyanjan= data['vyanjan'],
-            matras= data['matras'],
-            ank= data['ank'],
-            chinh= data['chinh'],
-            halanth= data['halanth'],
-        )
+        return DevanagariTokenizer()
     elif charset == 'hindi':
-        return HindiTokenizer(
-            svar= data['svar'],
-            vyanjan= data['vyanjan'],
-            matras= data['matras'],
-            ank= data['ank'],
-            chinh= data['chinh'],
-            halanth= data['halanth'],
-        )
+        return HindiTokenizer()
     elif charset == 'malayalam':
-        return MalayalamTokenizer(
-            svar= data['svar'],
-            vyanjan= data['vyanjan'],
-            matras= data['matras'],
-            ank= data['ank'],
-            chinh= data['chinh'],
-            halanth= data['halanth'],
-        )
+        return MalayalamTokenizer()
     else:
         raise NotImplementedError("Language hasn't been implemented yet")
         

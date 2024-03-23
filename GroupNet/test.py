@@ -34,10 +34,6 @@ def main(cfg: DictConfig):
                         val_dir= None,
                         transforms = None, 
                         test_transforms = test_composed,
-                        half_character_classes= model.hparams.half_character_classes,
-                        full_character_classes= model.hparams.full_character_classes,
-                        diacritic_classes= model.hparams.diacritic_classes,
-                        halfer= model.hparams.halfer,
                         )
     
     csv_logger = instantiate(cfg.csv_logger)
