@@ -136,8 +136,8 @@ class HindiTokenizer:
                     print(f"Duplicate Diacritic in group {grp} for label {label}")
                     return False
                 else:
-                    if grp[i] not in self.rev_f_c_label_map or \
-                        grp[i] not in self.rev_d_label_map or grp[i] not in self.rev_h_c_label_map:
+                    if grp[i] not in self.rev_f_c_label_map and \
+                        grp[i] not in self.rev_d_label_map and grp[i] not in self.rev_h_c_label_map:
                         print(f"Invalid {grp[i]} in group {grp} for label {label}")
                     else:
                         print(f"ill formed group {grp} in {label}")
@@ -545,8 +545,8 @@ class DevanagariTokenizer:
                         print(f"Duplicate Diacritic in group {grp} for label {label}")
                         return False
                 else:
-                    if grp[i] not in self.rev_f_c_label_map or \
-                        grp[i] not in self.rev_d_label_map or grp[i] not in self.rev_h_c_label_map:
+                    if grp[i] not in self.rev_f_c_label_map and \
+                        grp[i] not in self.rev_d_label_map and grp[i] not in self.rev_h_c_label_map:
                         print(f"Invalid {grp[i]} in group {grp} for label {label}")
 
                     elif h_c_count < 0:
@@ -812,7 +812,7 @@ class MalayalamTokenizer:
     PAD = "[P]"
     def __init__(self, threshold:float= 0.5, max_grps:int= 25):
         self.svar = ['അ', 'ആ', 'ഇ', 'ഈ', 'ഉ', 'ഊ', 'ഋ', 'എ', 'ഏ', 'ഐ',
-                    'ഒ', 'ഓ', 'ഔ', 'അം', 'അഃ']  # 'ൠ' has not been added as it has not been used in recent malayalam
+                    'ഒ', 'ഓ', 'ഔ']  # 'ൠ' has not been added as it has not been used in recent malayalam
         self.vyanjan = ['ക', 'ഖ', 'ഗ', 'ഘ', 'ങ',
                         'ച', 'ഛ', 'ജ', 'ഝ', 'ഞ',
                         'ട', 'ഠ', 'ഡ', 'ഢ', 'ണ',
@@ -820,7 +820,7 @@ class MalayalamTokenizer:
                         'പ', 'ഫ', 'ബ', 'ഭ', 'മ',
                         'യ', 'ര', 'ല', 'വ', 'ശ',
                         'ഷ', 'സ', 'ഹ', 'ള', 'ഴ', 'റ']
-        self.matras = ['ാ', 'ി', 'ീ', 'ു', 'ൂ', 'ൃ', 'ൈ', 'ൊ', 'ോ', 'ൗ', 'ൌ', 'െ', 'േ', 'ം', 'ഃ', '഻']
+        self.matras = ['ാ', 'ി', 'ീ', 'ു', 'ൂ', 'ൃ', 'ൈ', 'ൗ', 'െ', 'േ', 'ം', 'ഃ', '഻', 'ു്']
         # halanth is also referred as chandrakala in malayalam
         self.halanth = '്'
         self.chinh =  ['₹', '।', '!', '$', '%', '?', '.', ',', "-", '(', ')']
@@ -855,7 +855,7 @@ class MalayalamTokenizer:
         """
         returns the complete charset used by the tokenizer
         """
-        return self.h_c_classes + self.f_c_classes + self.d_classes
+        return self.h_c_classes + self.f_c_classes + self.d_classes + [self.halanth,]
     
     def _normalize_charset(self)-> None:
         """
@@ -926,9 +926,10 @@ class MalayalamTokenizer:
         for grp in grps:
             if grp[len(grp)-1] == '്' and grp in grps[:len(grps)-1]:
                 print(
-                    "group should not end with Chandrakala if its not the last group in the word/label or overflow in the num: of half_characters in a group")
+                    f"{grp} in label:{label} group should not end with Chandrakala if its not the last group in the word/label or overflow in the num: of half_characters in a group")
+                return False
             # allowed character category counts
-            h_c_count, f_c_count, d_c_count = 3, 1, 2
+            h_c_count, f_c_count, d_c_count = 3, 1, 3
             d_seen = []
             i = 0
             while i < len(grp):
@@ -945,7 +946,7 @@ class MalayalamTokenizer:
                     if i + 1 < len(grp) and self.halanth == grp[i + 1] and grp[i] in self.rev_h_c_label_map and h_c_count > 0:
                         h_c_count -= 1
                         i += 1
-                    elif grp[i] in self.rev_h_c_label_map and f_c_count > 0:
+                    elif grp[i] in self.rev_f_c_label_map and f_c_count > 0:
                         f_c_count -= 1
                     elif grp[i] in self.rev_d_label_map and d_c_count == 2:
                         d_c_count -= 1
@@ -959,19 +960,18 @@ class MalayalamTokenizer:
                     elif grp[i] == unicodedata.normalize("NFKD", '്') and grp[i-1] == unicodedata.normalize("NFKD", 'ു'):
                         i += 1
                     else:
-                        if grp[i] not in self.rev_h_c_label_map or \
-                                grp[i] not in self.rev_d_label_map or grp[i] not in self.rev_h_c_label_map:
+                        if grp[i] not in self.rev_h_c_label_map and \
+                                grp[i] not in self.rev_d_label_map and grp[i] not in self.rev_f_c_label_map:
                             print(f"Invalid {grp[i]} in group {grp} for label {label}")
-                        if (h_c_count, f_c_count, d_c_count) == (3, 1, 2):
-                            print(f"Invalid number of half {h_c_count}, full {f_c_count} \
-                                            or diacritic characters {d_c_count} in {grp} for {label}")
+                        if (h_c_count, f_c_count, d_c_count) == (3, 1, 3):
+                            print(
+                                f"Invalid number of half {h_c_count}, full {f_c_count} or diacritic characters {d_c_count} in {grp} for {label}")
                         return False
                     i += 1
-            if f_c_count == 1 or (h_c_count, f_c_count, d_c_count) == (3, 1, 2):
+            if f_c_count == 1:
                 if grp[len(grp)-1:] == self.halanth:
                     return True
-                print(
-                    f"There are no full character in group {grp} for {label} at {grps} OR")
+                print(f"There are no full character in group {grp} for {label} at {grps} OR")
                 return False
         return True
 
@@ -1021,19 +1021,31 @@ class MalayalamTokenizer:
                     if idx < len(label) and label[idx-1] == unicodedata.normalize("NFKD", 'ു') and label[idx] == unicodedata.normalize("NFKD", '്'):
                         running_grp += (label[idx])
                         idx += 1
-                    # there can be 1 diacritics in a group  + ['ം' & 'ഃ' ] attached to it
-                    if idx < len(label) and label[idx] in self.special_matra:
-                        running_grp += (label[idx])
-                        idx += 1
+                    
                     # the following if-condition is just to make sure we identify 'െെ', 'ൌ', 'ൊ', 'ോ'
-                    if idx < len(label):
+                    elif idx < len(label):
                         if label[idx-1] == unicodedata.normalize("NFKD", 'െ'):
                             if label[idx] in [unicodedata.normalize("NFKD", 'െ'), unicodedata.normalize("NFKD", 'ൗ'), unicodedata.normalize("NFKD", 'ാ')]:
                                 running_grp += (label[idx])
                                 idx += 1
+                            
                         elif label[idx-1] == unicodedata.normalize("NFKD", 'േ') and label[idx] == unicodedata.normalize("NFKD", 'ാ'):
                             running_grp += (label[idx])
                             idx += 1
+                        elif label[idx-1] == unicodedata.normalize("NFKD",'ാ' ):
+                             if label[idx] in [unicodedata.normalize("NFKD", 'െ'), unicodedata.normalize("NFKD", 'േ')]:
+                                running_grp += (label[idx])
+                                idx += 1
+                        elif label[idx-1] == unicodedata.normalize("NFKD",'ൗ' ):
+                             if label[idx] == unicodedata.normalize("NFKD", 'െ'):
+                                running_grp += (label[idx])
+                                idx += 1
+                    
+                    # there can be 1 diacritics in a group  + ['ം' & 'ഃ' ] attached to it
+                    if idx < len(label) and label[idx] in self.special_matra:
+                        running_grp += (label[idx])
+                        idx += 1
+                        
                 if t == idx:
                     print(
                         f"{label} is Invalid label because of {label[t]} after {label[t-1]} at index {t}")
@@ -1092,6 +1104,13 @@ class MalayalamTokenizer:
                        f"2 full Characters have occured {grp}-{char}"
                 f_c_target = self.rev_f_c_label_map[char]
 
+            elif char == unicodedata.normalize("NFKD", 'ു') and grp[i+1] == self.halanth:
+                # for diacritic occurence
+                assert d_target[self.rev_d_label_map[char + self.halanth]] == 0, \
+                    f"2 same matras occured {grp}-{char}-{d_target}"
+                
+                d_target[self.rev_d_label_map[grp[i-1] + char]] = 1.
+            
             elif self._check_diac(grp, i):
                 # for diacritic occurence
                 assert d_target[self.rev_d_label_map[char]] == 0, \
@@ -1099,7 +1118,7 @@ class MalayalamTokenizer:
                 
                 d_target[self.rev_d_label_map[char]] = 1.
 
-            elif char == self.halanth and halanth_cntr < 3:
+            elif char == self.halanth and halanth_cntr < 3 and grp[i-1] != unicodedata.normalize("NFKD", 'ു'):
                 halanth_cntr += 1
 
             elif char == self.halanth and halanth_cntr >=3 :

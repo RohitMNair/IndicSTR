@@ -29,8 +29,8 @@ def freq_counter(gt_file_path:str, charset:str, is_gt:bool = True):
             else:
                 ngrp_freq[len(grps)] += 1
 
-            for c in label:
-                if c in char_frq.keys():
+            for c in char_frq.keys():
+                if c in label:
                     char_frq[c] += 1
             cntr += 1
             if cntr % 100000 == 0:
