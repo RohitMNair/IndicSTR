@@ -90,7 +90,6 @@ class LMDBDataset(Dataset):
             imgbuf = txn.get(img_key)
             buf = io.BytesIO(imgbuf)
             img = Image.open(buf).convert('RGB')
-            img = to_tensor(img)
             if self.transforms is not None:
                 img = self.transforms(img)
         return img, label

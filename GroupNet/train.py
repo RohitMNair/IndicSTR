@@ -1,12 +1,14 @@
 import torch
 import hydra
+import signal
+from data.augment import rand_augment_transform
 from torchvision import transforms
 from utils.transforms import RescaleTransform, PadTransform
 from lightning.pytorch.callbacks import StochasticWeightAveraging, LearningRateMonitor
 from omegaconf import DictConfig
 from hydra.utils import instantiate
 from lightning.pytorch.plugins.environments import SLURMEnvironment
-import signal
+
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 torch.set_float32_matmul_precision('medium')
@@ -18,6 +20,8 @@ def main(cfg: DictConfig):
     Function to train character embeddings
     """
     composed = transforms.Compose([
+        rand_augment_transform(),
+        transforms.ToTensor(),
         transforms.RandomRotation(
             degrees= cfg.transforms.rotation, 
             expand = True, 
@@ -25,10 +29,11 @@ def main(cfg: DictConfig):
         ),
         RescaleTransform(cfg.transforms.img_size),
         PadTransform(cfg.transforms.img_size),
-        transforms.Normalize(
-            mean=[0.485, 0.456, 0.406],
-            std=[0.229, 0.224, 0.225]
-        ),
+        # transforms.Normalize(
+        #     mean=[0.485, 0.456, 0.406],
+        #     std=[0.229, 0.224, 0.225]
+        # ),
+        transforms.Normalize(0.5, 0.5)
         ])
     test_composed = transforms.Compose([
         RescaleTransform(cfg.transforms.img_size),

@@ -14,7 +14,7 @@ model_load: # this won't be used if restart_training is false
   checkpoint_path: ${ckpt_path}
 
 defaults: # this wont be used if restart_training is true
-  - model: FocalSTR # Options are FocalSTR, ViTSTR, GrpNet, FocalPosVisNet, FocalGrpNet
+  - model: HindiFocalSTR # Options are FocalSTR, ViTSTR, GrpNet, FocalPosVisNet, FocalGrpNet
   - _self_
 
 datamodule:
