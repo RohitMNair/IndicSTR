@@ -1167,12 +1167,13 @@ class MalayalamTokenizer:
 
         return h_c_3_target.to(device), h_c_2_target.to(device), h_c_1_target.to(device), f_c_target.to(device), d_target.to(device), len(grps)
     
-    def _decode_grp(self, h_c_3_pred:Tensor, h_c_2_pred:Tensor,h_c_1_pred:Tensor, f_c_pred:Tensor, 
+    def _decode_grp(self, h_c_3_pred:Tensor, h_c_2_pred:Tensor, h_c_1_pred:Tensor, f_c_pred:Tensor, 
                     d_pred:Tensor, d_max:Tensor)-> str:
         """
         Method which takes in class predictions of a single group and decodes
         the group
         Args:
+        - h_c_3_pred (Tensor): Index of max logit (prediction) of half-char 3; shape torch.Size(1)
         - h_c_2_pred (Tensor): Index of max logit (prediction) of half-char 2; shape torch.Size(1)
         - h_c_1_pred (Tensor): Index of max logit (prediction) of half-char 1; shape torch.Size(1)
         - f_c_pred (Tensor): Index of max logit (prediction) of full-char; shape torch.Size(1)
@@ -1214,10 +1215,11 @@ class MalayalamTokenizer:
         - tuple: the labels of each batch item
         """
         # logits shape: BS x Max Grps x # of classes
-        (h_c_2_logits, h_c_1_logits, f_c_logits, d_logits) = logits
+        (h_c_3_logits, h_c_2_logits, h_c_1_logits, f_c_logits, d_logits) = logits
         batch_size = h_c_2_logits.shape[0]
 
         # greedy decoding for half and full chars
+        h_c_3_preds = torch.argmax(h_c_3_logits, dim= 2)
         h_c_2_preds = torch.argmax(h_c_2_logits, dim= 2)
         h_c_1_preds = torch.argmax(h_c_1_logits, dim= 2)
         f_c_preds = torch.argmax(f_c_logits, dim= 2)
@@ -1232,6 +1234,7 @@ class MalayalamTokenizer:
             label = ""
             for j in range(self.max_grps):
                 grp = self._decode_grp(
+                                h_c_3_pred= h_c_3_preds[i,j],
                                 h_c_2_pred= h_c_2_preds[i,j],
                                 h_c_1_pred= h_c_1_preds[i,j],
                                 f_c_pred= f_c_preds[i,j],

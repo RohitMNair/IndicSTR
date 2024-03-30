@@ -4,8 +4,7 @@ from .decoder import GroupDecoder
 from typing import Tuple
 from torch import Tensor
 from model.base import DevanagariBaseSystem, HindiBaseSystem
-from model.head import FixedGrpClassifier
-
+from model.head import HindiFixedGrpClassifier
 import torch
 import torch.nn as nn
 
@@ -315,7 +314,7 @@ class FixedFocalGroupNet(DevanagariBaseSystem):
             attention_probs_dropout_prob= self.attention_probs_dropout_prob,
             qkv_bias= self.qkv_bias
         )
-        self.classifier = FixedGrpClassifier(
+        self.classifier = HindiFixedGrpClassifier(
             hidden_size= self.hidden_size,
             half_char1_embeddings= self.h_c_2_emb,
             half_char2_embeddings= self.h_c_1_emb,

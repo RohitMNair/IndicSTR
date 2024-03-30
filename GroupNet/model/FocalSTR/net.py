@@ -1,6 +1,6 @@
 from .encoder import FocalNetEncoder
 from model.base import HindiBaseSystem, DevanagariBaseSystem
-from model.head import FixedGrpClassifier
+from model.head import HindiFixedGrpClassifier
 from typing import Tuple
 from torch import Tensor
 
@@ -155,7 +155,7 @@ class HindiFixedFocalSTR(HindiBaseSystem):
         self.f_c_emb = nn.Parameter(self.f_c_emb, requires_grad= False)
         self.d_emb = nn.Parameter(self.d_emb, requires_grad= False)
         
-        self.classifier = FixedGrpClassifier(
+        self.classifier = HindiFixedGrpClassifier(
             hidden_size= self.hidden_size,
             half_char1_embeddings= self.h_c_2_emb,
             half_char2_embeddings= self.h_c_1_emb,

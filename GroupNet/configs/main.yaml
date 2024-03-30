@@ -29,7 +29,7 @@ datamodule:
   remove_unseen: false
 
 transforms:
-  rotation: 60
+  rotation: 0
   img_size: ${img_size}
   
 csv_logger:
