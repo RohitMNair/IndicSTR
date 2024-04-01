@@ -458,8 +458,8 @@ class HindiBaseSystem(pl.LightningModule):
         assert gt_labels is not None, "gt_labels cannot be none"
         assert pred_labels is not None, "pred_labels cannot be none"
         # Log the images (Give them different names)
-        _mean_ = torch.tensor([0.485, 0.456, 0.406], device= self.device)
-        _std_ = torch.tensor([0.229, 0.224, 0.225], device= self.device)
+        _mean_ = torch.tensor([0.5, 0.5, 0.5], device= self.device)
+        _std_ = torch.tensor([0.5, 0.5, 0.5], device= self.device)
         _mean_ = _mean_.view(1, 3, 1, 1).expand_as(viz_batch)
         _std_ = _std_.view(1, 3, 1, 1).expand_as(viz_batch)
         unnorm_viz_batch = viz_batch * _std_ + _mean_
@@ -558,6 +558,7 @@ class HindiBaseSystem(pl.LightningModule):
             + self.h_c_1_loss(input= flat_h_c_1_logits, target= flat_h_c_1_targets) \
             + self.f_c_loss(input= flat_f_c_logits, target= flat_f_c_targets) \
             + self.d_loss(input= flat_d_logits, target= flat_d_targets)
+        loss /= 4
         # print(f"The loss: {loss}")
         # Grp level metrics
         self.train_h_c_2_acc(flat_h_c_2_logits, flat_h_c_2_targets)
@@ -627,7 +628,7 @@ class HindiBaseSystem(pl.LightningModule):
             + self.h_c_1_loss(input= flat_h_c_1_logits, target= flat_h_c_1_targets) \
             + self.f_c_loss(input= flat_f_c_logits, target= flat_f_c_targets) \
             + self.d_loss(input= flat_d_logits, target= flat_d_targets)
-        
+        loss /= 4
         # Grp level metrics
         self.val_h_c_2_acc(flat_h_c_2_logits, flat_h_c_2_targets)
         self.val_h_c_1_acc(flat_h_c_1_logits, flat_h_c_1_targets)
@@ -687,7 +688,7 @@ class HindiBaseSystem(pl.LightningModule):
             + self.h_c_1_loss(input= flat_h_c_1_logits, target= flat_h_c_1_targets) \
             + self.f_c_loss(input= flat_f_c_logits, target= flat_f_c_targets) \
             + self.d_loss(input= flat_d_logits, target= flat_d_targets)
-        
+        loss /= 4
         # Grp level metrics
         self.test_h_c_2_acc(flat_h_c_2_logits, flat_h_c_2_targets)
         self.test_h_c_1_acc(flat_h_c_1_logits, flat_h_c_1_targets)
@@ -818,8 +819,8 @@ class MalayalamBaseSystem(pl.LightningModule):
         assert gt_labels is not None, "gt_labels cannot be none"
         assert pred_labels is not None, "pred_labels cannot be none"
 
-        _mean_ = torch.tensor([0.485, 0.456, 0.406], device= self.device)
-        _std_ = torch.tensor([0.229, 0.224, 0.225], device= self.device)
+        _mean_ = torch.tensor([0.5, 0.5, 0.5], device= self.device)
+        _std_ = torch.tensor([0.5, 0.5, 0.5], device= self.device)
         _mean_ = _mean_.view(1, 3, 1, 1).expand_as(viz_batch)
         _std_ = _std_.view(1, 3, 1, 1).expand_as(viz_batch)
         unnorm_viz_batch = viz_batch * _std_ + _mean_
@@ -874,8 +875,9 @@ class MalayalamBaseSystem(pl.LightningModule):
         d_pad = torch.zeros(self.num_d_classes, dtype = torch.float32, device= self.device)
         d_pad[self.tokenizer.pad_id] = 1.
         flat_d_non_pad = ~ torch.all(flat_d_targets == d_pad, dim= 1)
-        assert torch.all((flat_h_c_3_non_pad == flat_h_c_2_non_pad) \
-                          == (flat_h_c_2_non_pad == flat_h_c_1_non_pad) \
+      
+        assert torch.all(((flat_h_c_3_non_pad == flat_h_c_2_non_pad) \
+                          == (flat_h_c_2_non_pad == flat_h_c_1_non_pad)) \
                           == (flat_f_c_non_pad == flat_d_non_pad)).item(), \
                 "Pads are not aligned properly"
         
@@ -902,12 +904,13 @@ class MalayalamBaseSystem(pl.LightningModule):
                                   torch.zeros(batch_size, self.max_grps, device= self.device, dtype= torch.long),
                                   torch.zeros(batch_size, self.max_grps, device= self.device, dtype= torch.long),
                                   torch.zeros(batch_size, self.max_grps, device= self.device, dtype= torch.long),
+                                  torch.zeros(batch_size, self.max_grps, device= self.device, dtype= torch.long),
                                   torch.zeros(batch_size, self.max_grps, self.num_d_classes, device= self.device),
                                 )
         # print(f"The Targets:")
         n_grps = [self.max_grps for i in range(batch_size)]
         for idx,label in enumerate(labels, start= 0):
-            (h_c_2_targets, h_c_2_targets[idx], h_c_1_targets[idx], 
+            (h_c_3_targets[idx], h_c_2_targets[idx], h_c_1_targets[idx], 
             f_c_targets[idx], d_targets[idx], n_grps[idx]) = self.tokenizer.label_encoder(label, device= self.device)
             # print(f"The label:{label}; The Targets: {h_c_2_targets[idx]}\n{h_c_1_targets[idx]}\n{f_c_targets[idx]}\n{d_targets[idx]}\n{n_grps[idx]}\n\n")
 
@@ -942,7 +945,7 @@ class MalayalamBaseSystem(pl.LightningModule):
         # self.train_wrr(pred_strs= self.tokenizer.decode((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits)), target_strs= labels)
 
         if batch_no % 1000000 == 0:
-            pred_labels = self.tokenizer.decode((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits))            
+            pred_labels = self.tokenizer.decode((h_c_3_logits, h_c_2_logits, h_c_1_logits, f_c_logits, d_logits))            
             self._log_tb_images(imgs[:5], pred_labels= pred_labels[:5], gt_labels= labels[:5], mode= "train")
         # On step logs for proggress bar display
         log_dict_step = {
@@ -976,17 +979,17 @@ class MalayalamBaseSystem(pl.LightningModule):
                                   torch.zeros(batch_size, self.max_grps, device= self.device, dtype= torch.long),
                                   torch.zeros(batch_size, self.max_grps, device= self.device, dtype= torch.long),
                                   torch.zeros(batch_size, self.max_grps, device= self.device, dtype= torch.long),
+                                  torch.zeros(batch_size, self.max_grps, device= self.device, dtype= torch.long),
                                   torch.zeros(batch_size, self.max_grps, self.num_d_classes, device= self.device),
                                 )
         # print(f"The Targets:")
         n_grps = [self.max_grps for i in range(batch_size)]
         for idx,label in enumerate(labels, start= 0):
-            (h_c_2_targets, h_c_2_targets[idx], h_c_1_targets[idx], 
+            (h_c_3_targets[idx], h_c_2_targets[idx], h_c_1_targets[idx], 
             f_c_targets[idx], d_targets[idx], n_grps[idx]) = self.tokenizer.label_encoder(label, device= self.device)
             # print(f"The label:{label}; The Targets: {h_c_2_targets[idx]}\n{h_c_1_targets[idx]}\n{f_c_targets[idx]}\n{d_targets[idx]}\n{n_grps[idx]}\n\n")
 
         (h_c_3_logits, h_c_2_logits, h_c_1_logits, f_c_logits, d_logits) = self.forward(imgs)
-
         # Get the flattened versions of the targets and the logits for grp level metrics
         ((flat_h_c_3_targets, flat_h_c_2_targets, flat_h_c_1_targets, flat_f_c_targets, flat_d_targets), 
         (flat_h_c_3_logits, flat_h_c_2_logits, flat_h_c_1_logits, flat_f_c_logits, flat_d_logits)) = self._get_flattened_non_pad(
@@ -1016,7 +1019,7 @@ class MalayalamBaseSystem(pl.LightningModule):
         # self.val_wrr(pred_strs= self.tokenizer.decode((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits)), target_strs= labels)
         
         if batch_no % 100000 == 0:
-            pred_labels = self.tokenizer.decode((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits))            
+            pred_labels = self.tokenizer.decode((h_c_3_logits, h_c_2_logits, h_c_1_logits, f_c_logits, d_logits))            
             self._log_tb_images(imgs[:5], pred_labels= pred_labels[:5], gt_labels= labels[:5], mode= "val")
 
         # On epoch only logs
@@ -1041,12 +1044,13 @@ class MalayalamBaseSystem(pl.LightningModule):
                                   torch.zeros(batch_size, self.max_grps, device= self.device, dtype= torch.long),
                                   torch.zeros(batch_size, self.max_grps, device= self.device, dtype= torch.long),
                                   torch.zeros(batch_size, self.max_grps, device= self.device, dtype= torch.long),
+                                  torch.zeros(batch_size, self.max_grps, device= self.device, dtype= torch.long),
                                   torch.zeros(batch_size, self.max_grps, self.num_d_classes, device= self.device),
                                 )
         # print(f"The Targets:")
         n_grps = [self.max_grps for i in range(batch_size)]
         for idx,label in enumerate(labels, start= 0):
-            (h_c_2_targets, h_c_2_targets[idx], h_c_1_targets[idx], 
+            (h_c_3_targets[idx], h_c_2_targets[idx], h_c_1_targets[idx], 
             f_c_targets[idx], d_targets[idx], n_grps[idx]) = self.tokenizer.label_encoder(label, device= self.device)
             # print(f"The label:{label}; The Targets: {h_c_2_targets[idx]}\n{h_c_1_targets[idx]}\n{f_c_targets[idx]}\n{d_targets[idx]}\n{n_grps[idx]}\n\n")
 

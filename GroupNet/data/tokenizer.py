@@ -219,8 +219,8 @@ class HindiTokenizer:
                                                                   dtype= torch.long
                                                                 )
                                                             )
+        halanth_cntr = 0
         for i, char in enumerate(grp):
-            halanth_cntr = 0
             if char in self.rev_h_c_label_map and i + 1 < len(grp) and grp[i+1] == self.halanth:
                     # for half character occurence
                     if h_c_1_target == self.blank_id:
@@ -645,8 +645,8 @@ class DevanagariTokenizer:
                                                                   dtype= torch.long
                                                                 )
                                                             )
+        halanth_cntr = 0
         for i, char in enumerate(grp):
-            halanth_cntr = 0
             if self._check_h_c(grp, i) == 1 and halanth_cntr < 2:
                 # for half character occurence
                 if h_c_1_target == self.blank_id:
@@ -828,9 +828,9 @@ class MalayalamTokenizer:
 
         self.chillaksharam = ['ൺ', 'ൻ', 'ർ', 'ൽ', 'ൾ']
         self.special_matra = ['ം', 'ഃ']
+        self._normalize_charset()
         self.threshold = threshold
         self.max_grps = max_grps
-        self._normalize_charset()
         self.h_c_classes = [MalayalamTokenizer.EOS, MalayalamTokenizer.PAD, MalayalamTokenizer.BLANK] \
                             + self.vyanjan
         self.f_c_classes = [MalayalamTokenizer.EOS, MalayalamTokenizer.PAD, MalayalamTokenizer.BLANK] \
@@ -868,6 +868,7 @@ class MalayalamTokenizer:
         self.matras = [unicodedata.normalize("NFKD", char) for char in self.matras]
         self.chillaksharam = [unicodedata.normalize("NFKD", char) for char in self.chillaksharam]
         self.special_matra = [unicodedata.normalize("NFKD", char) for char in self.special_matra]
+        self.halanth = unicodedata.normalize("NFKD", self.halanth)
 
     def _check_h_c(self, label: str, idx: int) -> bool:
         """
@@ -924,7 +925,7 @@ class MalayalamTokenizer:
         - bool: True if all groups pass the sanity check else raises an Exception
         """
         for grp in grps:
-            if grp[len(grp)-1] == '്' and grp in grps[:len(grps)-1]:
+            if grp[len(grp)-1] == self.halanth and grp in grps[:len(grps)-1]:
                 print(
                     f"{grp} in label:{label} group should not end with Chandrakala if its not the last group in the word/label or overflow in the num: of half_characters in a group")
                 return False
@@ -957,7 +958,7 @@ class MalayalamTokenizer:
                         print(
                             f"Duplicate Diacritic in group {grp} for label {label}")
                         return False
-                    elif grp[i] == unicodedata.normalize("NFKD", '്') and grp[i-1] == unicodedata.normalize("NFKD", 'ു'):
+                    elif grp[i] == self.halanth and grp[i-1] == unicodedata.normalize("NFKD", 'ു'):
                         i += 1
                     else:
                         if grp[i] not in self.rev_h_c_label_map and \
@@ -1018,7 +1019,7 @@ class MalayalamTokenizer:
                     running_grp += label[idx]
                     idx += 1
                     # 'ു്' has been checked for,because of its presence in older datasets instead of just 'ു'
-                    if idx < len(label) and label[idx-1] == unicodedata.normalize("NFKD", 'ു') and label[idx] == unicodedata.normalize("NFKD", '്'):
+                    if idx < len(label) and label[idx-1] == unicodedata.normalize("NFKD", 'ു') and label[idx] == self.halanth:
                         running_grp += (label[idx])
                         idx += 1
                     
@@ -1078,56 +1079,69 @@ class MalayalamTokenizer:
                                                                   dtype= torch.long
                                                                 )
                                                             )
-        for i, char in enumerate(grp):
-            halanth_cntr = 0
+        halanth_cntr = 0
+        i = 0
+        while i < len(grp):
             if self._check_h_c(grp, i) and halanth_cntr < 3:
                 # for half character occurence
                 if h_c_1_target == self.blank_id:
                     # half_character1 will always track the half-character
                     # which is joined with the complete character
-                    h_c_1_target = self.rev_h_c_label_map[char]
+                    h_c_1_target = self.rev_h_c_label_map[grp[i]]
                     
                 elif h_c_2_target == self.blank_id: # there are more than 1 half-characters
                     # half_character2 will keep track of half-character 
                     # not joined with the complete character
                     h_c_2_target = h_c_1_target
                     # the first half-char will be joined to the complete character
-                    h_c_1_target = self.rev_h_c_label_map[char]
+                    h_c_1_target = self.rev_h_c_label_map[grp[i]]
                 else:
                     # for the third half-char
                     h_c_3_target = h_c_2_target
                     h_c_2_target = h_c_1_target
-                    h_c_1_target = self.rev_h_c_label_map[char]
+                    h_c_1_target = self.rev_h_c_label_map[grp[i]]
 
             elif self._check_f_c(grp, i):
                 assert f_c_target == self.blank_id,\
-                       f"2 full Characters have occured {grp}-{char}"
-                f_c_target = self.rev_f_c_label_map[char]
-
-            elif char == unicodedata.normalize("NFKD", 'ു') and grp[i+1] == self.halanth:
-                # for diacritic occurence
-                assert d_target[self.rev_d_label_map[char + self.halanth]] == 0, \
-                    f"2 same matras occured {grp}-{char}-{d_target}"
-                
-                d_target[self.rev_d_label_map[grp[i-1] + char]] = 1.
+                       f"2 full Characters have occured {grp}-{grp[i]}"
+                f_c_target = self.rev_f_c_label_map[grp[i]]
             
-            elif self._check_diac(grp, i):
-                # for diacritic occurence
-                assert d_target[self.rev_d_label_map[char]] == 0, \
-                    f"2 same matras occured {grp}-{char}-{d_target}"
-                
-                d_target[self.rev_d_label_map[char]] = 1.
+            elif i + 1 < len(grp) and (grp[i] == unicodedata.normalize("NFKD", 'െ') and grp[i+1] == unicodedata.normalize("NFKD", 'െ')):
+                # cannot combine the above matra 'െെ' as it is a repitition of the same െ
+                assert d_target[self.rev_d_label_map[unicodedata.normalize("NFKD",'ൈ')]] == 0, \
+                    f"2 same matras occured {grp}-{grp[i]}-{d_target}"
+                d_target[self.rev_d_label_map['ൈ']] = 1.
+                i += 1
 
-            elif char == self.halanth and halanth_cntr < 3 and grp[i-1] != unicodedata.normalize("NFKD", 'ു'):
+            elif i + 1 < len(grp) and (grp[i] == unicodedata.normalize("NFKD", 'ു') and grp[i+1] == self.halanth):
+                assert d_target[self.rev_d_label_map[grp[i] + grp[i + 1]]] == 0, \
+                    f"2 same matras occured {grp}-{grp[i]}-{d_target}"
+                d_target[self.rev_d_label_map[grp[i] + grp[i + 1]]] = 1.
+                i += 1 # skip the next iteration as it is part of matra
+                
+            elif self._check_d_c(grp, i):
+                # for diacritic occurence
+                assert d_target[self.rev_d_label_map[grp[i]]] == 0, \
+                    f"2 same matras occured {grp}-{grp[i]}-{d_target}"
+                
+                d_target[self.rev_d_label_map[grp[i]]] = 1.
+
+            elif grp[i] == self.halanth and halanth_cntr < 3 and grp[i-1] != unicodedata.normalize("NFKD", 'ു'):
                 halanth_cntr += 1
 
-            elif char == self.halanth and halanth_cntr >=3 :
-                raise Exception(f"More than 3 half-characters occured: {grp}")
+            elif grp[i] == self.halanth and halanth_cntr >=3 :
+                raise Exception(f"More than 3 half-grp[i]acters occured: {grp} at index {i}")
+
+            elif grp[i] not in self.rev_h_c_label_map and grp[i] not in self.rev_f_c_label_map \
+                and grp[i] not in self.rev_d_label_map and grp[i] != self.halanth:
+                raise Exception(f"grp[i]acter {grp[i]} not found in vocabulary for grp {grp} at index {i}")
 
             else:
-                raise Exception(f"Character {char} not found in vocabulary")
-
-        assert torch.sum(d_target, dim = -1) <= 2, f"More than 2 diacritics occured {grp}-{d_target}"
+                raise Exception(f"Invalid group {grp} due to grp[i] at {i}- {grp[i]}")
+            
+            i += 1
+            
+        assert torch.sum(d_target, dim = -1) <= 3, f"More than 2 diacritics occured {grp}-{d_target}"
 
         return h_c_3_target, h_c_2_target, h_c_1_target, f_c_target, d_target
 
@@ -1164,7 +1178,6 @@ class MalayalamTokenizer:
        
         for idx,grp in enumerate(grps, start= 0):
             h_c_3_target[idx], h_c_2_target[idx], h_c_1_target[idx], f_c_target[idx], d_target[idx] = self.grp_class_encoder(grp=grp)
-
         return h_c_3_target.to(device), h_c_2_target.to(device), h_c_1_target.to(device), f_c_target.to(device), d_target.to(device), len(grps)
     
     def _decode_grp(self, h_c_3_pred:Tensor, h_c_2_pred:Tensor, h_c_1_pred:Tensor, f_c_pred:Tensor, 
@@ -1204,12 +1217,12 @@ class MalayalamTokenizer:
                 
         return grp.replace(MalayalamTokenizer.BLANK, "").replace(MalayalamTokenizer.PAD, "") # remove all [B], [P] occurences
                 
-    def decode(self, logits:Tuple[Tensor, Tensor, Tensor, Tensor])-> tuple:
+    def decode(self, logits:Tuple[Tensor, Tensor, Tensor, Tensor, Tensor])-> tuple:
         """
         Method to decode the labels of a batch given the logits
         Args:-
         - logits (tuple(Tensor, Tensor, Tensor, Tensor)): the logits of the model in the order
-                                                        half-char 2, half-char 1, full-char, diacritic
+                                                        half-char 3, half-char 2, half-char 1, full-char, diacritic
                                                         logits
         Returns:
         - tuple: the labels of each batch item
