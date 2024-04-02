@@ -558,7 +558,7 @@ class HindiBaseSystem(pl.LightningModule):
             + self.h_c_1_loss(input= flat_h_c_1_logits, target= flat_h_c_1_targets) \
             + self.f_c_loss(input= flat_f_c_logits, target= flat_f_c_targets) \
             + self.d_loss(input= flat_d_logits, target= flat_d_targets)
-        loss /= 4
+        
         # print(f"The loss: {loss}")
         # Grp level metrics
         self.train_h_c_2_acc(flat_h_c_2_logits, flat_h_c_2_targets)
@@ -628,7 +628,6 @@ class HindiBaseSystem(pl.LightningModule):
             + self.h_c_1_loss(input= flat_h_c_1_logits, target= flat_h_c_1_targets) \
             + self.f_c_loss(input= flat_f_c_logits, target= flat_f_c_targets) \
             + self.d_loss(input= flat_d_logits, target= flat_d_targets)
-        loss /= 4
         # Grp level metrics
         self.val_h_c_2_acc(flat_h_c_2_logits, flat_h_c_2_targets)
         self.val_h_c_1_acc(flat_h_c_1_logits, flat_h_c_1_targets)
@@ -688,7 +687,6 @@ class HindiBaseSystem(pl.LightningModule):
             + self.h_c_1_loss(input= flat_h_c_1_logits, target= flat_h_c_1_targets) \
             + self.f_c_loss(input= flat_f_c_logits, target= flat_f_c_targets) \
             + self.d_loss(input= flat_d_logits, target= flat_d_targets)
-        loss /= 4
         # Grp level metrics
         self.test_h_c_2_acc(flat_h_c_2_logits, flat_h_c_2_targets)
         self.test_h_c_1_acc(flat_h_c_1_logits, flat_h_c_1_targets)
