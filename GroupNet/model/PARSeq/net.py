@@ -247,26 +247,20 @@ class PARSeq(HindiBaseSystem):
         tgt_query = self.dropout2(tgt_query)
         return self.decoder(tgt_query, tgt_emb, memory, tgt_query_mask, tgt_mask, tgt_padding_mask)
 
-    def forward(self, images: Tensor, max_length: Optional[int] = None) -> Tensor:
-        testing = max_length is None
-        max_length = self.max_label_length if max_length is None else min(max_length, self.max_label_length)
+    def forward(self, images: Tensor) -> Tensor:
         bs = images.shape[0]
-        # +1 for <eos> at end of sequence.
-        num_steps = max_length + 1
         memory = self.encoder(images)
-
-        # Query positions up to `num_steps`
-        pos_queries = self.pos_queries[:, :num_steps].expand(bs, -1, -1)
+        pos_queries = self.pos_queries.expand(bs, -1, -1)
 
         # Special case for the forward permutation. Faster than using `generate_attn_masks()`
-        tgt_mask = query_mask = torch.triu(torch.full((num_steps, num_steps), float('-inf'), device=self._device), 1)
+        tgt_mask = query_mask = torch.triu(torch.full((self.max_grps, self.max_grps), float('-inf'), device=self._device), 1)
 
         if self.decode_ar:
-            tgt_in = torch.full((bs, num_steps), self.pad_id, dtype=torch.long, device=self._device)
+            tgt_in = torch.full((bs, self.max_grps), self.pad_id, dtype=torch.long, device=self._device)
             tgt_in[:, 0] = self.bos_id
 
             logits = []
-            for i in range(num_steps):
+            for i in range(self.max_grps):
                 j = i + 1  # next token index
                 # Efficient decoding:
                 # Input the context up to the ith token. We use only one query (at position = i) at a time.
@@ -380,7 +374,7 @@ class PARSeq(HindiBaseSystem):
         query_mask = mask[1:, :-1]
         return content_mask, query_mask
 
-    def training_step(self, batch, batch_idx) -> STEP_OUTPUT:
+    def training_step(self, batch, batch_idx):
         images, labels = batch
         tgt = self.tokenizer.encode(labels, self._device)
 
