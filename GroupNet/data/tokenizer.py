@@ -949,12 +949,10 @@ class MalayalamTokenizer:
                         i += 1
                     elif grp[i] in self.rev_f_c_label_map and f_c_count > 0:
                         f_c_count -= 1
-                    elif grp[i] in self.rev_d_label_map and d_c_count == 2:
+                    elif grp[i] in self.rev_d_label_map and d_c_count > 0 and grp[i] not in d_seen:
                         d_c_count -= 1
                         d_seen.append(grp[i])
-                    elif grp[i] in self.rev_d_label_map and d_c_count != 2 and grp[i] not in d_seen:
-                        d_c_count -= 1
-                    elif grp[i] in self.rev_d_label_map and d_c_count != 2 and grp[i] in d_seen:
+                    elif grp[i] in self.rev_d_label_map and d_c_count > 0 and grp[i] in d_seen:
                         print(
                             f"Duplicate Diacritic in group {grp} for label {label}")
                         return False
@@ -967,6 +965,7 @@ class MalayalamTokenizer:
                         if (h_c_count, f_c_count, d_c_count) == (3, 1, 3):
                             print(
                                 f"Invalid number of half {h_c_count}, full {f_c_count} or diacritic characters {d_c_count} in {grp} for {label}")
+                        
                         return False
                     i += 1
             if f_c_count == 1:

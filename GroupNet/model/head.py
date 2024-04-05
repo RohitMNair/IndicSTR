@@ -4,6 +4,20 @@ import lightning.pytorch as pl
 import torch.nn as nn
 import torch
 
+def get_activation(activation_function_name):
+    """
+    Get activation function from torch.nn.functional module
+    Args:
+        activation_function_name (str): Name of the activation function (e.g., 'relu', 'sigmoid', 'tanh')
+
+    Returns:
+        torch.nn.Module: Activation function
+    """
+    activation_function = getattr(nn, activation_function_name, None)
+    if activation_function is None:
+        raise ValueError(f"Activation function '{activation_function_name}' not found in torch.nn.functional.")
+    return activation_function
+
 class HindiGrpClassifier(pl.LightningModule):
     """
     A multi-head-multi-label classifier to classify characters within a group
