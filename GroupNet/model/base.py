@@ -782,8 +782,9 @@ class MalayalamBaseSystem(pl.LightningModule):
         # self.val_wrr = ComprihensiveWRR(threshold= self.threshold)
         self.val_wrr2 = WRR2W3HalfChar(threshold= self.threshold)
         # Testing Metrics
-        self.test_h_c_1_acc = HalfCharacterAccuracy(threshold = self.threshold)
+        self.test_h_c_3_acc = HalfCharacterAccuracy(threshold = self.threshold)
         self.test_h_c_2_acc = HalfCharacterAccuracy(threshold = self.threshold)
+        self.test_h_c_1_acc = HalfCharacterAccuracy(threshold = self.threshold)
         self.test_comb_h_c_acc = Combined3HalfCharAccuracy(threshold= self.threshold)
         self.test_f_c_acc = FullCharacterAccuracy(threshold = self.threshold)
         self.test_d_acc = DiacriticAccuracy(threshold = self.threshold)

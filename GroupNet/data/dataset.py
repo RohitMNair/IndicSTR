@@ -63,8 +63,7 @@ class LMDBDataset(Dataset):
                 label = unicodedata.normalize('NFKD', label)
                 # remove other characters
                 if self.remove_unseen:
-                    label = ''.join(c for c in label if c in (self.tokenizer.f_c_classes + \
-                                    self.tokenizer.h_c_classes + self.tokenizer.d_classes + (self.tokenizer.halanth, )))
+                    label = ''.join(c for c in label if c in (self.tokenizer.get_charset()))
                 if index % 100000 == 0:
                     print(f"Processed {index} number of labels", flush = True)
 

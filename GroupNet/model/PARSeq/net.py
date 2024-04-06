@@ -3,6 +3,7 @@ from model.FocalSTR.encoder import FocalNetEncoder
 from torch import Tensor
 from model.head import get_activation
 from typing import Optional, Sequence
+from itertools import permutations
 import lightning.pytorch as pl
 import torch.nn as nn
 import torch
@@ -26,11 +27,14 @@ class DecoderLayer(pl.LightningModule):
         self.self_attn_h_c = []
         for _ in range(self.num_h_c):
             # 0th index will correspond to h_c_n and ith index will correspond to h_c_(n-i)
-            self.self_attn_h_c.append(nn.MultiheadAttention(d_model/(num_h_c * 3), nhead / self.num_h_c, 
-                                                            dropout= dropout, batch_first= True))
+            print(d_model//(num_h_c * 3), nhead / self.num_h_c)
+            self.self_attn_h_c.append(
+                                        nn.MultiheadAttention(d_model//(num_h_c * 3), nhead / self.num_h_c, 
+                                                                dropout= dropout, batch_first= True)
+                                    )
         
-        self.self_attn_f_c = nn.MultiheadAttention(d_model / 3, nhead, dropout=dropout, batch_first=True)
-        self.self_attn_d_c = nn.MultiheadAttention(d_model / 3, nhead, dropout=dropout, batch_first=True)
+        self.self_attn_f_c = nn.MultiheadAttention(d_model // 3, nhead, dropout=dropout, batch_first=True)
+        self.self_attn_d_c = nn.MultiheadAttention(d_model // 3, nhead, dropout=dropout, batch_first=True)
         self.cross_attn = nn.MultiheadAttention(d_model, nhead * 3, dropout=dropout, batch_first=True)
 
         # for merging representations
@@ -106,19 +110,19 @@ class Decoder(pl.LightningModule):
     __constants__ = ['norm']
 
     def __init__(self, d_model:int , nhead:int, dim_feedforward= 2048, dropout= 0.1, activation='GELU', 
-                 layer_norm_eps=1e-5, num_h_c_2 = 2, num_layers = 1):
+                 layer_norm_eps=1e-5, num_h_c = 2, num_layers = 1):
         super().__init__()
         self.layers = nn.Sequential(
-                        DecoderLayer(d_model, nhead, dim_feedforward=dim_feedforward,
+                        *[DecoderLayer(d_model, nhead, dim_feedforward=dim_feedforward,
                                     dropout= dropout, activation= activation,
-                                    layer_norm_eps=layer_norm_eps, num_h_c = num_h_c_2) for _ in range(num_layers)
+                                    layer_norm_eps=layer_norm_eps, num_h_c = num_h_c) for _ in range(num_layers)]
                     )
         self.num_layers = num_layers
         self.norm = nn.LayerNorm(d_model)
 
     def forward(self, query, context, memory, query_mask: Optional[Tensor] = None, context_mask: Optional[Tensor] = None,
                 context_key_padding_mask: Optional[Tensor] = None):
-        
+        print(query.shape, context.shape, memory.shape)
         query = self.layers(query, context, memory, query_mask, context_mask, context_key_padding_mask)
         query = self.norm(query)
         return query
@@ -148,8 +152,7 @@ class PARSeq(HindiBaseSystem):
 
     def __init__(self, embed_dim: int = 96, depths:list= [2, 2, 6, 2],
                  focal_levels:list= [2, 2, 2, 2], focal_windows:list= [3, 3, 3, 3],
-                 mlp_ratio: float= 4.0, hidden_dropout_prob: float = 0.0,
-                 drop_path_rate:float = 0.1, initializer_range: float = 0.02, 
+                 mlp_ratio: float= 4.0, drop_path_rate:float = 0.1, initializer_range: float = 0.02, 
                  layer_norm_eps: float = 1e-12, image_size: int = 224, patch_size: int = 16, 
                  num_channels: int = 3, dec_num_heads: int = 12, dec_mlp_ratio: int= 4, 
                  dec_depth: int= 1, perm_num:int= 25, perm_forward: bool= True, 
@@ -166,7 +169,7 @@ class PARSeq(HindiBaseSystem):
         self.focal_levels = focal_levels
         self.focal_windows = focal_windows
         self.mlp_ratio = mlp_ratio
-        self.hidden_dropout_prob = hidden_dropout_prob
+        self.dropout = dropout
         self.drop_path_rate = drop_path_rate
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
@@ -188,7 +191,7 @@ class PARSeq(HindiBaseSystem):
         self.max_gen_perms = perm_num // 2 if perm_mirrored else perm_num
 
         self.encoder = FocalNetEncoder(
-            hidden_dropout_prob= self.hidden_dropout_prob, 
+            hidden_dropout_prob= self.dropout, 
             initializer_range = self.initializer_range,
             image_size= self.image_size, 
             patch_size= self.patch_size, 
@@ -205,7 +208,7 @@ class PARSeq(HindiBaseSystem):
     
         self.decoder = Decoder( 
                             d_model= self.hidden_sizes[-1], 
-                            nhead= self.dec_num_heads,
+                            nhead= self.dec_num_heads / 3,
                             dim_feedforward= self.hidden_sizes[-1] * self.dec_mlp_ratio,
                             dropout= self.dropout,
                             activation="GELU",
@@ -224,8 +227,10 @@ class PARSeq(HindiBaseSystem):
 
         # +1 for <eos>
         self.pos_queries = nn.Parameter(torch.Tensor(1, max_grps, self.hidden_sizes[-1]))
-        self.dropout1 = nn.Dropout(dropout)
-        self.dropout2 = nn.Dropout(dropout)
+        self.h_c_ctx_dropout = [nn.Dropout(dropout) for _ in range(2)]
+        self.f_c_ctx_dropout = nn.Dropout(dropout)
+        self.d_c_ctx_dropout = nn.Dropout(dropout)
+        self.pos_dropout = nn.Dropout(dropout)
         nn.init.trunc_normal_(self.pos_queries, std=.02)
 
     @torch.jit.ignore
@@ -234,18 +239,28 @@ class PARSeq(HindiBaseSystem):
         enc_param_names = {'encoder.' + n for n in self.encoder.no_weight_decay()}
         return param_names.union(enc_param_names)
 
-    def decode(self, tgt: torch.Tensor, memory: torch.Tensor, tgt_mask: Optional[Tensor] = None,
-               tgt_padding_mask: Optional[Tensor] = None, tgt_query: Optional[Tensor] = None,
-               tgt_query_mask: Optional[Tensor] = None):
-        N, L = tgt.shape
+    def decode(self, h_c_ctx:Tensor, f_c_ctx:Tensor, d_c_ctx:Tensor, memory:Tensor,
+               ctx_mask: Optional[Tensor] = None, ctx_padding_mask: Optional[Tensor] = None,
+               query: Optional[Tensor] = None, query_mask: Optional[Tensor] = None):
+        N, L = h_c_ctx.shape
         # <bos> stands for the null context. We only supply position information for characters after <bos>.
-        null_ctx = self.text_embed(tgt[:, :1])
-        tgt_emb = self.pos_queries[:, :L - 1] + self.text_embed(tgt[:, 1:])
-        tgt_emb = self.dropout1(torch.cat([null_ctx, tgt_emb], dim=1))
-        if tgt_query is None:
-            tgt_query = self.pos_queries[:, :L].expand(N, -1, -1)
-        tgt_query = self.dropout2(tgt_query)
-        return self.decoder(tgt_query, tgt_emb, memory, tgt_query_mask, tgt_mask, tgt_padding_mask)
+        h_c_null_ctx, f_c_null_ctx, d_c_null_ctx = self.text_embed(
+                            h_c_tokens= [h_c[:,0] for h_c in h_c_ctx],
+                            f_c_tokens = f_c_ctx[:, 0],
+                            d_c_tokens = d_c_ctx[:, 0],
+                        )
+        h_c_ctx_emb, f_c_ctx_emb, d_c_ctx_emb  = self.text_embed(
+                                h_c_tokens= [h_c[:,1:] for h_c in h_c_ctx],
+                                f_c_tokens = f_c_ctx[:, 1:],
+                                d_c_tokens = d_c_ctx[:, 1:],
+                            )
+        
+        
+        if query is None:
+            query = self.pos_queries[:, :L].expand(N, -1, -1)
+        tgt_query = self.pos_dropout(tgt_query)
+        # return self.decoder(tgt_query, tgt_emb, memory, query_mask, mask, padding_mask)
+        return self.decoder(query, context, memory, query_mask, ctx_mask, ctx_padding_mask)
 
     def forward(self, images: Tensor) -> Tensor:
         bs = images.shape[0]
@@ -253,12 +268,19 @@ class PARSeq(HindiBaseSystem):
         pos_queries = self.pos_queries.expand(bs, -1, -1)
 
         # Special case for the forward permutation. Faster than using `generate_attn_masks()`
-        tgt_mask = query_mask = torch.triu(torch.full((self.max_grps, self.max_grps), float('-inf'), device=self._device), 1)
+        context_mask = query_mask = torch.triu(torch.full((self.max_grps, self.max_grps), float('-inf'), device=self._device), 1)
 
         if self.decode_ar:
-            tgt_in = torch.full((bs, self.max_grps), self.pad_id, dtype=torch.long, device=self._device)
-            tgt_in[:, 0] = self.bos_id
+            h_c_context = []
+            for _ in range(2):
+                t_ = torch.full((bs, self.max_grps), self.tokenizer.pad_id, dtype=torch.long, device=self._device)
+                t_[:, 0] = self.tokenizer.blank_id
+                h_c_context.append(t_)
 
+            f_c_context = torch.full((bs, self.max_grps), self.tokenizer.pad_id, dtype=torch.long, device=self._device)
+            d_c_context = torch.full((bs, self.max_grps), self.tokenizer.pad_id, dtype=torch.long, device=self._device)
+            f_c_context[:, 0] = d_c_context[:, 0] = self.tokenizer.blank_id # change with BOS later
+            
             logits = []
             for i in range(self.max_grps):
                 j = i + 1  # next token index
@@ -266,16 +288,16 @@ class PARSeq(HindiBaseSystem):
                 # Input the context up to the ith token. We use only one query (at position = i) at a time.
                 # This works because of the lookahead masking effect of the canonical (forward) AR context.
                 # Past tokens have no access to future tokens, hence are fixed once computed.
-                tgt_out = self.decode(tgt_in[:, :j], memory, tgt_mask[:j, :j], tgt_query=pos_queries[:, i:j],
+                tgt_out = self.decode([:, :j], memory, context_mask[:j, :j], tgt_query=pos_queries[:, i:j],
                                       tgt_query_mask=query_mask[i:j, :j])
                 # the next token probability is in the output's ith token position
                 p_i = self.head(tgt_out)
                 logits.append(p_i)
-                if j < num_steps:
+                if j < self.max_grps:
                     # greedy decode. add the next token index to the target input
                     tgt_in[:, j] = p_i.squeeze().argmax(-1)
                     # Efficient batch decoding: If all output words have at least one EOS token, end decoding.
-                    if testing and (tgt_in == self.eos_id).any(dim=-1).all():
+                    if (tgt_in == self.eos_id).any(dim=-1).all():
                         break
 
             logits = torch.cat(logits, dim=1)
@@ -288,7 +310,7 @@ class PARSeq(HindiBaseSystem):
         if self.refine_iters:
             # For iterative refinement, we always use a 'cloze' mask.
             # We can derive it from the AR forward mask by unmasking the token context to the right.
-            query_mask[torch.triu(torch.ones(num_steps, num_steps, dtype=torch.bool, device=self._device), 2)] = 0
+            query_mask[torch.triu(torch.ones(self.max_grps, self.max_grps, dtype=torch.bool, device=self._device), 2)] = 0
             bos = torch.full((bs, 1), self.bos_id, dtype=torch.long, device=self._device)
             for i in range(self.refine_iters):
                 # Prior context is the previous output.
