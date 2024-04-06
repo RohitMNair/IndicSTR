@@ -17,6 +17,9 @@ defaults: # this wont be used if restart_training is true
   - model: HindiFocalSTR # Options are FocalSTR, ViTSTR, GrpNet, FocalPosVisNet, FocalGrpNet
   - _self_
 
+model:
+  image_size: ${img_size}
+  
 datamodule:
   _target_: data.module.LMDBDataModule
   train_dir: /home/rohitn/D1/HindiSynth/hindi_train_merged_lmdb
