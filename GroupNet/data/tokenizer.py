@@ -1533,13 +1533,13 @@ class HindiPARSeqTokenizer:
                                         diacritic one hot encoding
         """
         grps = self.label_transform(label= label) 
-        h_c_2_target, h_c_1_target, f_c_target, d_target = ( # plus 2 for bos and eos
+        h_c_2_target, h_c_1_target, f_c_target, d_target = ( # +2 for bos and eos
                                                             torch.full((self.max_grps + 2,), self.pad_id, dtype= torch.long), 
                                                             torch.full((self.max_grps + 2,), self.pad_id, dtype= torch.long),
                                                             torch.full((self.max_grps + 2,), self.pad_id, dtype= torch.long),
                                                             torch.zeros(self.max_grps + 2, len(self.d_classes), dtype= torch.long)
                                                         )
-        d_target[:,self.pad_id] = 1.
+        d_target[:, self.pad_id] = 1.
         d_target[0, self.bos_id] = 1.
         h_c_2_target[0] = h_c_1_target[0] = f_c_target[0] = self.bos_id
         # truncate grps if grps exceed max_grps
@@ -1584,7 +1584,7 @@ class HindiPARSeqTokenizer:
         grp += self.d_c_label_map[int(d_pred[0].item())] if d_max[0] else ""
         grp += self.d_c_label_map[int(d_pred[1].item())] if d_max[1] else ""
                 
-        return grp.replace(self.BLANK, "").replace(self.PAD, "") # remove all [B], [P] occurences
+        return grp.replace(self.BLANK, "").replace(self.PAD, "").replace(self.BOS, "").replace(self.EOS, "") # remove all [B], [P] occurences
                 
     def decode(self, logits:Tuple[Tensor, Tensor, Tensor, Tensor])-> tuple:
         """

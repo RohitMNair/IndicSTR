@@ -48,22 +48,22 @@ class DecoderLayer(pl.LightningModule):
         self.num_h_c = num_h_c
         self.num_d_c = num_d_c
         # 0th index will correspond to h_c_n and ith index will correspond to h_c_(n-i)
-        self.self_attn_h_c = [nn.MultiheadAttention(d_model // (3 * len(nhead_self_attn[0])), nhead_self_attn[0], 
-                                                    dropout= dropout, batch_first= True) for _ in range(num_h_c)]
-        self.self_attn_f_c = nn.MultiheadAttention(d_model // 3, nhead_self_attn[1], dropout=dropout, batch_first=True)
-        self.self_attn_d_c = [nn.MultiheadAttention(d_model // (3 * len(nhead_self_attn[2])), nhead_self_attn[2],
-                                                    dropout=dropout, batch_first=True) for _ in range(num_d_c)]
-        
-        self.cross_attn = nn.MultiheadAttention(d_model, nhead_cross_attn, dropout=dropout, batch_first=True)
+        self.self_attn_h_c = [nn.MultiheadAttention(d_model, nhead_self_attn[0][i], 
+                                                    dropout= dropout, batch_first= True) for i in range(num_h_c)]
+        self.self_attn_f_c = nn.MultiheadAttention(d_model, nhead_self_attn[1], dropout=dropout, batch_first=True)
+        self.self_attn_d_c = [nn.MultiheadAttention(d_model, nhead_self_attn[2][i],
+                                                    dropout=dropout, batch_first=True) for i in range(num_d_c)]
 
         # for merging representations
-        self.merge1 = nn.Linear(d_model, dim_feedforward)
+        self.norm_merge = nn.LayerNorm(d_model*(num_h_c + 1 + num_d_c), eps= layer_norm_eps)
+        self.merge1 = nn.Linear(d_model*(num_h_c + 1 + num_d_c), dim_feedforward)
         self.activation_merge = get_activation(activation)()
         self.dropout_merge1 = nn.Dropout(dropout)
         self.merge2 = nn.Linear(dim_feedforward, d_model)
         self.dropout_merge2 = nn.Dropout(dropout)
-        self.norm_merge = nn.LayerNorm(d_model, eps= layer_norm_eps)
 
+        # cross attention
+        self.cross_attn = nn.MultiheadAttention(d_model, nhead_cross_attn, dropout=dropout, batch_first=True)
         # Implementation of Feedforward model
         self.linear1 = nn.Linear(d_model, dim_feedforward)
         self.dropout = nn.Dropout(dropout)
@@ -72,9 +72,9 @@ class DecoderLayer(pl.LightningModule):
         self.norm1 = nn.LayerNorm(d_model, eps=layer_norm_eps)
         self.norm2 = nn.LayerNorm(d_model, eps=layer_norm_eps)
         self.norm_q = nn.LayerNorm(d_model, eps=layer_norm_eps)
-        self.norm_contxt_h_c = [nn.LayerNorm(d_model, eps=layer_norm_eps) for _ in range(num_h_c)]
-        self.norm_contxt_f_c = nn.LayerNorm(d_model, eps=layer_norm_eps)
-        self.norm_contxt_d_c = [nn.LayerNorm(d_model, eps=layer_norm_eps) for _ in range(num_d_c)]
+        self.norm_ctx_h_c = [nn.LayerNorm(d_model, eps=layer_norm_eps) for _ in range(num_h_c)]
+        self.norm_ctx_f_c = nn.LayerNorm(d_model, eps=layer_norm_eps)
+        self.norm_ctx_d_c = [nn.LayerNorm(d_model, eps=layer_norm_eps) for _ in range(num_d_c)]
 
         self.dropout1 = nn.Dropout(dropout)
         self.dropout2 = nn.Dropout(dropout)
@@ -93,13 +93,16 @@ class DecoderLayer(pl.LightningModule):
         # self-attn
         sa_h_c, sa_weights_h_c = [], []
         for self_attn, h_c in zip(self.self_attn_h_c, h_c_kv):
-            sa_, w_= self_attn(query_norm, h_c, attn_mask=query_mask, key_padding_mask=key_padding_mask)
+            sa_, w_= self_attn(query= query_norm, key= h_c, value= h_c, attn_mask= query_mask, 
+                               key_padding_mask= key_padding_mask)
             sa_h_c.append(sa_)
             sa_weights_h_c.append(w_)
-        sa_f_c, sa_weights_f_c = self.self_attn_f_c(query_norm, f_c_kv, attn_mask=query_mask, key_padding_mask=key_padding_mask)
-        sa_d_c, sa_weights_d_c = []
+        sa_f_c, sa_weights_f_c = self.self_attn_f_c(query= query_norm, key= f_c_kv, value= f_c_kv, 
+                                                    attn_mask=query_mask, key_padding_mask=key_padding_mask)
+        sa_d_c, sa_weights_d_c = [],[]
         for self_attn, d_c in zip(self.self_attn_d_c, d_c_kv):
-            sa_, w_ = self.self_attn_d_c(query_norm, d_c, attn_mask=query_mask, key_padding_mask=key_padding_mask)
+            sa_, w_ = self_attn(query= query_norm, key= d_c, value= d_c,
+                                         attn_mask=query_mask, key_padding_mask=key_padding_mask)
             sa_d_c.append(sa_)
             sa_weights_d_c.append(w_)
         
@@ -110,7 +113,7 @@ class DecoderLayer(pl.LightningModule):
         query = query + self.dropout_merge2(sa)
         
         # cross attn
-        ca, ca_weights = self.cross_attn(self.norm1(query), memory, memory)
+        ca, ca_weights = self.cross_attn(query= self.norm1(query), key= memory, value= memory)
         query = query + self.dropout2(ca)
 
         # MLP
@@ -121,9 +124,9 @@ class DecoderLayer(pl.LightningModule):
     def forward(self, query:Tensor, context_h_c:Sequence[Tensor], context_f_c:Tensor, context_d_c:Sequence[Tensor], 
                 memory:Tensor, query_mask: Optional[Tensor] = None, context_key_padding_mask: Optional[Tensor] = None):
         query_norm = self.norm_q(query)
-        context_h_c_norm = (self.norm_context_h_c[i](context_h_c_i) for i, context_h_c_i in enumerate(context_h_c))
-        context_f_c_norm = self.norm_contxt_f_c(context_f_c)
-        context_d_c_norm = (self.norm_contxt_d_c[i](context_d_c_i) for i, context_d_c_i in enumerate(context_d_c))
+        context_h_c_norm = [self.norm_ctx_h_c[i](context_h_c_i) for i, context_h_c_i in enumerate(context_h_c)]
+        context_f_c_norm = self.norm_ctx_f_c(context_f_c)
+        context_d_c_norm = [self.norm_ctx_d_c[i](context_d_c_i) for i, context_d_c_i in enumerate(context_d_c)]
         query = self.forward_stream(query, query_norm, context_h_c_norm, context_f_c_norm, context_d_c_norm,
                                     memory, query_mask, context_key_padding_mask)[0]
         return query

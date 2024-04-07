@@ -1,0 +1,30 @@
+_target_: model.PARSeq.net.HindiPARSeq
+# hidden_sizes: [128, 256, 512, 1024] # FocalNet Base
+embed_dim: 132 # hidden_sizes will be embed_dim * (2 ** stage_no) starting from 0
+depths: [2, 2, 18, 2]
+focal_levels: [2, 2, 2, 2]
+focal_windows: [3, 3, 3, 3]
+mlp_ratio: 4.0
+dropout: 0.1
+drop_path_rate: 0.1
+initializer_range: 0.02
+layer_norm_eps: 1.0e-12
+image_size: 128
+patch_size: 4
+num_channels: 3
+#Decoder args
+dec_num_sa_heads: 12
+dec_num_ca_heads: 12
+dec_mlp_ratio: 4
+dec_depth: 1
+perm_num: 25
+perm_forward: True 
+perm_mirrored: True
+decode_ar: True
+refine_iters: 1
+# tokenizer args
+threshold: 0.5
+# optimizer args
+learning_rate: 1.0e-4
+weight_decay: 0.0
+warmup_pct: 0.3
