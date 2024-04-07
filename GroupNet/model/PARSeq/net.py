@@ -15,7 +15,7 @@ class DecoderLayer(pl.LightningModule):
        This implements a pre-LN decoder, as opposed to the post-LN default in PyTorch."""
 
     def __init__(self, d_model, nhead, dim_feedforward=2048, dropout=0.1, activation='GELU',
-                 layer_norm_eps=1e-5, num_h_c:int = 2):
+                 layer_norm_eps=1e-5, num_h_c:int = 2, num_d_c:int = 2):
         """
         constructor for DecoderLayer
         Args:
@@ -24,17 +24,19 @@ class DecoderLayer(pl.LightningModule):
         """
         super().__init__()
         self.num_h_c = num_h_c
-        self.self_attn_h_c = []
+        self.num_d_c = num_d_c
+        self.self_attn_h_c = [nn.MultiheadAttention(d_model//(num_h_c * 3), nhead / self.num_h_c, 
+                                                    dropout= dropout, batch_first= True) for _ in range(num_h_c)]
         for _ in range(self.num_h_c):
             # 0th index will correspond to h_c_n and ith index will correspond to h_c_(n-i)
-            print(d_model//(num_h_c * 3), nhead / self.num_h_c)
             self.self_attn_h_c.append(
                                         nn.MultiheadAttention(d_model//(num_h_c * 3), nhead / self.num_h_c, 
                                                                 dropout= dropout, batch_first= True)
                                     )
         
         self.self_attn_f_c = nn.MultiheadAttention(d_model // 3, nhead, dropout=dropout, batch_first=True)
-        self.self_attn_d_c = nn.MultiheadAttention(d_model // 3, nhead, dropout=dropout, batch_first=True)
+        self.self_attn_d_c = [nn.MultiheadAttention(d_model // (num_d_c * 3), nhead / num_d_c,
+                                                    dropout=dropout, batch_first=True) for _ in range(num_d_c)]
         self.cross_attn = nn.MultiheadAttention(d_model, nhead * 3, dropout=dropout, batch_first=True)
 
         # for merging representations
@@ -55,7 +57,7 @@ class DecoderLayer(pl.LightningModule):
         self.norm_q = nn.LayerNorm(d_model, eps=layer_norm_eps)
         self.norm_contxt_h_c = [nn.LayerNorm(d_model, eps=layer_norm_eps) for _ in range(num_h_c)]
         self.norm_contxt_f_c = nn.LayerNorm(d_model, eps=layer_norm_eps)
-        self.norm_contxt_d_c = nn.LayerNorm(d_model, eps=layer_norm_eps)
+        self.norm_contxt_d_c = [nn.LayerNorm(d_model, eps=layer_norm_eps) for _ in range(num_d_c)]
 
         self.dropout1 = nn.Dropout(dropout)
         self.dropout2 = nn.Dropout(dropout)
@@ -72,17 +74,20 @@ class DecoderLayer(pl.LightningModule):
         memory is LayerNorm'd by ViT.
         """
         # self-attn
-        tgt2_h_c = []
-        sa_weights_h_c = []
+        tgt2_h_c, sa_weights_h_c = [], []
         for self_attn, tgt_h_c in zip(self.self_attn_h_c, tgt_h_c_kv):
             tgt_, sa_ = self_attn(tgt_norm, tgt_h_c, attn_mask=tgt_mask, key_padding_mask=tgt_key_padding_mask)
             tgt2.append(tgt_)
             sa_weights_h_c.append(sa_)
         tgt2_f_c, sa_weights_f_c = self.self_attn_f_c(tgt_norm, tgt_f_c_kv, attn_mask=tgt_mask, key_padding_mask=tgt_key_padding_mask)
-        tgt2_d_c, sa_weights_d_c = self.self_attn_d_c(tgt_norm, tgt_d_c_kv, attn_mask=tgt_mask, key_padding_mask=tgt_key_padding_mask)
-
+        tgt2_d_c, sa_weights_d_c = []
+        for self_attn, tgt_d_c in zip(self.self_attn_d_c, tgt_d_c_kv):
+            tgt_, sa_ = self.self_attn_d_c(tgt_norm, tgt_d_c, attn_mask=tgt_mask, key_padding_mask=tgt_key_padding_mask)
+            tgt2_d_c.append(tgt_)
+            sa_weights_d_c.append(sa_)
+        
         # Merge
-        tgt2 = torch.cat([*tgt2_h_c, tgt2_f_c, tgt2_d_c], dim= -1)
+        tgt2 = torch.cat([*tgt2_h_c, tgt2_f_c, *tgt2_d_c], dim= -1)
         sa_weights = (tuple(sa_weights_h_c), sa_weights_f_c, sa_weights_d_c)
         tgt2 = self.merge2(self.dropout_merge1(self.activation_merge(self.merge1(self.norm_merge(tgt2)))))
         tgt = tgt + self.dropout_merge2(tgt2)
@@ -96,12 +101,12 @@ class DecoderLayer(pl.LightningModule):
         tgt = tgt + self.dropout3(tgt2)
         return tgt, sa_weights, ca_weights
 
-    def forward(self, query:Tensor, context_h_c:tuple, context_f_c:Tensor, context_d_c:Tensor, memory:Tensor,
-                query_mask: Optional[Tensor] = None, context_key_padding_mask: Optional[Tensor] = None):
+    def forward(self, query:Tensor, context_h_c:Sequence[Tensor], context_f_c:Tensor, context_d_c:Sequence[Tensor], 
+                memory:Tensor, query_mask: Optional[Tensor] = None, context_key_padding_mask: Optional[Tensor] = None):
         query_norm = self.norm_q(query)
         context_h_c_norm = (self.norm_context_h_c[i](context_h_c_i) for i, context_h_c_i in enumerate(context_h_c))
         context_f_c_norm = self.norm_contxt_f_c(context_f_c)
-        context_d_c_norm = self.norm_contxt_d_c(context_d_c)
+        context_d_c_norm = (self.norm_contxt_d_c[i](context_d_c_i) for i, context_d_c_i in enumerate(context_d_c))
         query = self.forward_stream(query, query_norm, context_h_c_norm, context_f_c_norm, context_d_c_norm,
                                     memory, query_mask, context_key_padding_mask)[0]
         return query
@@ -110,16 +115,17 @@ class Decoder(pl.LightningModule):
     __constants__ = ['norm']
 
     def __init__(self, d_model:int , nhead:int, dim_feedforward= 2048, dropout= 0.1, activation='GELU', 
-                 layer_norm_eps=1e-5, num_h_c = 2, num_layers = 1):
+                 layer_norm_eps=1e-5, num_h_c:int = 2, num_d_c:int = 2, num_layers:int = 1):
         super().__init__()
         self.layers = [DecoderLayer(d_model, nhead, dim_feedforward=dim_feedforward,
                                     dropout= dropout, activation= activation,
-                                    layer_norm_eps=layer_norm_eps, num_h_c = num_h_c) for _ in range(num_layers)]
+                                    layer_norm_eps=layer_norm_eps, 
+                                    num_h_c = num_h_c, num_d_c= num_d_c) for _ in range(num_layers)]
         self.num_layers = num_layers
         self.norm = nn.LayerNorm(d_model)
 
-    def forward(self, query:Tensor, context_h_c:tuple, context_f_c:Tensor, context_d_c:Tensor, memory, query_mask: Optional[Tensor] = None,
-                context_key_padding_mask: Optional[Tensor] = None):
+    def forward(self, query:Tensor, context_h_c:Sequence[Tensor], context_f_c:Tensor, context_d_c:Sequence[Tensor],
+                memory, query_mask: Optional[Tensor] = None, context_key_padding_mask: Optional[Tensor] = None):
         for layer in self.layers:
             query = layer(query, context_h_c, context_f_c, context_d_c, memory, query_mask, context_key_padding_mask)
         query = self.norm(query)
@@ -127,24 +133,21 @@ class Decoder(pl.LightningModule):
 
 class TokenEmbedding(pl.LightningModule):
 
-    def __init__(self, h_c_charset_size: int, f_c_charset_size:int, d_c_charset_size:int, embed_dim: int, num_h_c:int = 2):
+    def __init__(self, h_c_charset_size: int, f_c_charset_size:int, d_c_charset_size:int, 
+                 embed_dim: int, num_h_c:int = 2, num_d_c:int = 2):
         super().__init__()
-        self.h_c_embedding = []
-        for _ in range(num_h_c):
-            self.h_c_embedding.append(nn.Embedding(num_embeddings=h_c_charset_size, embedding_dim=embed_dim))
-            
+        self.h_c_embedding = [nn.Embedding(num_embeddings=h_c_charset_size, embedding_dim=embed_dim)
+                                for _ in range(num_h_c)]
         self.f_c_embedding = nn.Embedding(num_embeddings=f_c_charset_size, embedding_dim=embed_dim)
-        self.d_c_embedding = nn.Embedding(num_embeddings=d_c_charset_size, embedding_dim=embed_dim)
+        self.d_c_embedding = [nn.Embedding(num_embeddings=d_c_charset_size, embedding_dim=embed_dim)
+                                for _ in range(num_d_c)]
         self.embed_dim = embed_dim
 
-    def forward(self, h_c_tokens: Sequence[Tensor], f_c_tokens:Tensor, d_c_tokens:Tensor):
-        h_c_emb = []
-        for i, h_c in enumerate(h_c_tokens):
-            h_c_emb.append(self.h_c_embedding[i](h_c))
+    def forward(self, h_c_tokens: Sequence[Tensor], f_c_tokens:Tensor, d_c_tokens:Sequence[Tensor]):
+        h_c_emb = [math.sqrt(self.embed_dim) * self.h_c_embedding[i](h_c_t) for i,h_c_t in enumerate(h_c_tokens)]
         f_c_emb = math.sqrt(self.embed_dim) * self.f_c_embedding(f_c_tokens)
-        d_c_emb = math.sqrt(self.embed_dim) * self.d_c_embedding(d_c_tokens)
-        return map(lambda x: math.sqrt(self.embed_dim) * x, h_c_emb), f_c_emb, d_c_emb
-
+        d_c_emb = [math.sqrt(self.embed_dim) * self.d_c_embedding[i](d_c_t) for i, d_c_t in enumerate(d_c_tokens)]
+        return h_c_emb, f_c_emb, d_c_emb
 
 class HindiPARSeq(HindiBaseSystem):
 
@@ -212,6 +215,7 @@ class HindiPARSeq(HindiBaseSystem):
                             activation="GELU",
                             layer_norm_eps= self.layer_norm_eps,
                             num_h_c= 2,
+                            num_d_c= 2,
                             num_layers= 1,
                         )
 
@@ -220,7 +224,8 @@ class HindiPARSeq(HindiBaseSystem):
                             f_c_charset_size= len(self.tokenizer.f_c_classes),
                             d_c_charset_size= len(self.tokenizer.d_classes),
                             embed_dim= self.hidden_sizes[-1],
-                            num_h_c= 2
+                            num_h_c= 2,
+                            num_d_c= 2,
                         )
 
         # +1 for <eos>
@@ -237,32 +242,31 @@ class HindiPARSeq(HindiBaseSystem):
         enc_param_names = {'encoder.' + n for n in self.encoder.no_weight_decay()}
         return param_names.union(enc_param_names)
 
-    def decode(self, h_c_ctx:Sequence[Tensor], f_c_ctx:Tensor, d_c_ctx:Tensor, memory:Tensor,
-                ctx_padding_mask: Optional[Tensor] = None, 
-                query_mask: Optional[Tensor] = None):
-        N, L = h_c_ctx.shape
+    def decode(self, query:Tensor, h_c_ctx:Sequence[Tensor], f_c_ctx:Tensor, d_c_ctx:Sequence[Tensor], memory:Tensor,
+                ctx_padding_mask: Optional[Tensor] = None, query_mask: Optional[Tensor] = None):
+        N, L = f_c_ctx.shape
         # <bos> stands for the null context. We only supply position information for characters after <bos>.
         h_c_null_ctx, f_c_null_ctx, d_c_null_ctx = self.text_embed(
                             h_c_tokens= [h_c[:,0] for h_c in h_c_ctx],
                             f_c_tokens = f_c_ctx[:, 0],
-                            d_c_tokens = d_c_ctx[:, 0],
+                            d_c_tokens = [d_c[:, 0] for d_c in d_c_ctx],
                         )
         h_c_ctx_emb, f_c_ctx_emb, d_c_ctx_emb  = self.text_embed(
                                 h_c_tokens= [h_c[:,1:] for h_c in h_c_ctx],
                                 f_c_tokens = f_c_ctx[:, 1:],
-                                d_c_tokens = d_c_ctx[:, 1:],
+                                d_c_tokens = [d_c[:, 1:] for d_c in d_c_ctx],
                             )
         h_c_ctx_emb = [ctx + self.pos_queries[:,:L-1] for ctx in h_c_ctx_emb]
         f_c_ctx_emb += self.pos_queries[:,:L-1]
-        d_c_ctx_emb += self.pos_queries[:,:L-1]
+        d_c_ctx_emb += [ctx + self.pos_queries[:,:L-1] for ctx in d_c_ctx_emb]
         
         h_c_ctx_emb = self.h_c_ctx_dropout([torch.cat([null_ctx, ctx], dim= 1) for null_ctx, ctx in zip(h_c_null_ctx, h_c_ctx_emb)])
         f_c_ctx_emb = self.f_c_ctx_dropout(torch.cat([f_c_null_ctx, f_c_ctx_emb], dim= 1))
-        d_c_ctx_emb = self.d_c_ctx_dropout(torch.cat([d_c_null_ctx, d_c_ctx_emb], dim= 1))
+        d_c_ctx_emb = self.d_c_ctx_dropout([torch.cat([null_ctx, ctx], dim= 1) for null_ctx, ctx in zip(d_c_null_ctx, d_c_ctx_emb)])
 
         if query is None:
             query = self.pos_queries[:, :L].expand(N, -1, -1)
-        tgt_query = self.pos_dropout(tgt_query)
+        query = self.pos_dropout(query)
         
         return self.decoder(query= query, context_h_c= h_c_ctx_emb, context_f_c= f_c_ctx_emb, context_d_c= d_c_ctx_emb,
                             memory= memory, query_mask= query_mask, context_key_padding_mask= ctx_padding_mask)
@@ -273,19 +277,23 @@ class HindiPARSeq(HindiBaseSystem):
         pos_queries = self.pos_queries.expand(bs, -1, -1)
 
         # Special case for the forward permutation. Faster than using `generate_attn_masks()`
-        query_mask = torch.triu(torch.full((self.max_grps, self.max_grps), float('-inf'), device=self._device), 1)
+        query_mask = torch.triu(torch.full((self.max_grps, self.max_grps), float('-inf'), device=self.device), 1)
 
         if self.decode_ar:
             h_c_ctx = []
             for _ in range(2):
-                t_ = torch.full((bs, self.max_grps), self.tokenizer.pad_id, dtype=torch.long, device=self._device)
+                t_ = torch.full((bs, self.max_grps), self.tokenizer.pad_id, dtype=torch.long, device=self.device)
                 t_[:, 0] = self.tokenizer.blank_id
                 h_c_ctx.append(t_)
 
-            f_c_ctx = torch.full((bs, self.max_grps), self.tokenizer.pad_id, dtype=torch.long, device=self._device)
-            d_c_ctx = torch.full((bs, self.max_grps), self.tokenizer.pad_id, dtype=torch.long, device=self._device)
-            f_c_ctx[:, 0] = d_c_ctx[:, 0] = self.tokenizer.blank_id # change with BOS later
-            
+            f_c_ctx = torch.full((bs, self.max_grps), self.tokenizer.pad_id, dtype=torch.long, device=self.device)
+            f_c_ctx[:, 0] = self.tokenizer.blank_id # change with BOS later
+            d_c_ctx = []
+            for _ in range(2):
+                t_ = torch.full((bs, self.max_grps), self.tokenizer.pad_id, dtype=torch.long, device=self.device)
+                t_[:, 0] = self.tokenizer.blank_id
+                d_c_ctx.append(t_)
+          
             logits = []
             for i in range(self.max_grps):
                 j = i + 1  # next token index
@@ -304,8 +312,8 @@ class HindiPARSeq(HindiBaseSystem):
                     h_c_ctx[1][:, j] = h_c_1_logit.squeeze().argmax(-1)
                     f_c_ctx[:, j] = f_c_logit.squeeze().argmax(-1)
                     vals, indices = torch.topk(d_c_logit.squeeze(), k= 2)
-                    d_c_ctx[:, j] = indices[0]
-                    d_c_2_ctx[: j] = indices[1] # to be done
+                    d_c_ctx[0][:, j] = indices[:, 0]
+                    d_c_ctx[1][:, j] = indices[:, 1]
                     # Efficient batch decoding: If all output words have at least one EOS token, end decoding.
                     # if (tgt_in == self.eos_id).any(dim=-1).all():
                     #     break
@@ -315,26 +323,37 @@ class HindiPARSeq(HindiBaseSystem):
                         torch.cat([h_c_2_logit for h_c_2_logit in logits[0]], dim= 1), 
                         torch.cat([h_c_1_logit for h_c_1_logit in logits[1]], dim= 1),
                         torch.cat([f_c_logit for f_c_logit in logits[2]], dim= 1),
-                        torch.cat([d_c_1_logit for d_c_1_logit in logits[3]], dim= 1),
-                        torch.cat([d_c_2_logit for d_c_2_logit in logits[4]], dim= 1)
+                        torch.cat([d_c_logit for d_c_logit in logits[3]], dim= 1),
                     ]
         else:
             # No prior context, so input is just <bos>. We query all positions.
-            tgt_in = torch.full((bs, 1), self.bos_id, dtype=torch.long, device=self._device)
-            tgt_out = self.decode(tgt_in, memory, tgt_query=pos_queries)
-            logits = self.head(tgt_out)
+            h_c_ctx = [torch.full((bs, 1), self.tokenizer.bos_id, dtype= torch.long, device=self.device) for _ in range(2)]
+            f_c_ctx = torch.full((bs, 1), self.tokenizer.bos_id, dtype= torch.long, device= self.device)
+            d_c_ctx = [torch.full((bs, 1), self.tokenizer.bos_id, dtype= torch.long, device=self.device) for _ in range(2)]
+            tgt_out = self.decode(query=pos_queries, h_c_ctx= h_c_ctx, f_c_ctx= f_c_ctx, d_c_ctx= d_c_ctx, memory= memory)
+            logits = self.classifier(tgt_out)
 
         if self.refine_iters:
             # For iterative refinement, we always use a 'cloze' mask.
             # We can derive it from the AR forward mask by unmasking the token context to the right.
-            query_mask[torch.triu(torch.ones(self.max_grps, self.max_grps, dtype=torch.bool, device=self._device), 2)] = 0
-            bos = torch.full((bs, 1), self.bos_id, dtype=torch.long, device=self._device)
+            query_mask[torch.triu(torch.ones(self.max_grps, self.max_grps, dtype=torch.bool, device=self.device), 2)] = 0
+            bos = torch.full((bs, 1), self.tokenizer.bos_id, dtype=torch.long, device=self.device)
             for i in range(self.refine_iters):
                 # Prior context is the previous output.
-                tgt_in = torch.cat([bos, logits[:, :-1].argmax(-1)], dim=1)
-                tgt_padding_mask = ((tgt_in == self.eos_id).int().cumsum(-1) > 0)  # mask tokens beyond the first EOS token.
-                tgt_out = self.decode(tgt_in, memory, tgt_mask, tgt_padding_mask,
-                                      tgt_query=pos_queries, tgt_query_mask=query_mask[:, :tgt_in.shape[1]])
+                h_c_ctx = [torch.cat([bos, h_c_logits[:, :-1].argmax(-1)], dim= 1) for h_c_logits in logits[:2]]
+                f_c_ctx = torch.cat([bos, logits[2][:, :-1].argmax(-1)], dim= 1)
+                vals, indices = torch.topk(logits[-1])
+                d_c_ctx = [torch.cat([bos, indices[:,:,i]]) for i in range(2)]
+
+                # ctx_padding_mask = ((tgt_in == self.eos_id).int().cumsum(-1) > 0)  # mask tokens beyond the first EOS token.
+                h_c_ctx_pad = sum([(ctx == self.tokenizer.eos_id).int().cumsum(-1) for ctx in h_c_ctx])
+                f_c_ctx_pad = (f_c_ctx == self.tokenizer.eos_id).int().cumsum(-1)
+                d_c_ctx_pad = sum([(ctx == self.tokenizer.eos_id).int().cumsum(-1) for ctx in d_c_ctx])
+                ctx_padding_mask = (h_c_ctx_pad + f_c_ctx_pad + d_c_ctx_pad) > 0
+                tgt_out = self.decode(query=pos_queries, h_c_ctx= h_c_ctx, f_c_ctx= f_c_ctx,
+                                        memory= memory, query_mask=query_mask[:, :f_c_ctx.shape[1]],
+                                        ctx_padding_mask= ctx_padding_mask,
+                                      )
                 logits = self.classifier(tgt_out)
 
         return logits
@@ -348,8 +367,8 @@ class HindiPARSeq(HindiBaseSystem):
         max_num_chars = tgt.shape[1] - 2
         # Special handling for 1-character sequences
         if max_num_chars == 1:
-            return torch.arange(3, device=self._device).unsqueeze(0)
-        perms = [torch.arange(max_num_chars, device=self._device)] if self.perm_forward else []
+            return torch.arange(3, device=self.device).unsqueeze(0)
+        perms = [torch.arange(max_num_chars, device=self.device)] if self.perm_forward else []
         # Additional permutations if needed
         max_perms = math.factorial(max_num_chars)
         if self.perm_mirrored:
@@ -364,7 +383,7 @@ class HindiPARSeq(HindiBaseSystem):
                 selector = [0, 3, 4, 6, 9, 10, 12, 16, 17, 18, 19, 21]
             else:
                 selector = list(range(max_perms))
-            perm_pool = torch.as_tensor(list(permutations(range(max_num_chars), max_num_chars)), device=self._device)[selector]
+            perm_pool = torch.as_tensor(list(permutations(range(max_num_chars), max_num_chars)), device=self.device)[selector]
             # If the forward permutation is always selected, no need to add it to the pool for sampling
             if self.perm_forward:
                 perm_pool = perm_pool[1:]
@@ -373,7 +392,7 @@ class HindiPARSeq(HindiBaseSystem):
                 i = self.rng.choice(len(perm_pool), size=num_gen_perms - len(perms), replace=False)
                 perms = torch.cat([perms, perm_pool[i]])
         else:
-            perms.extend([torch.randperm(max_num_chars, device=self._device) for _ in range(num_gen_perms - len(perms))])
+            perms.extend([torch.randperm(max_num_chars, device=self.device) for _ in range(num_gen_perms - len(perms))])
             perms = torch.stack(perms)
         if self.perm_mirrored:
             # Add complementary pairs
@@ -394,7 +413,7 @@ class HindiPARSeq(HindiBaseSystem):
         # 1. Reverse context for the characters
         # 2. Null context for [EOS] (required for learning to predict [EOS] in NAR mode)
         if len(perms) > 1:
-            perms[1, 1:] = max_num_chars + 1 - torch.arange(max_num_chars + 1, device=self._device)
+            perms[1, 1:] = max_num_chars + 1 - torch.arange(max_num_chars + 1, device=self.device)
         return perms
 
     def generate_attn_masks(self, perm):
@@ -403,19 +422,19 @@ class HindiPARSeq(HindiBaseSystem):
         :return: lookahead attention masks
         """
         sz = perm.shape[0]
-        mask = torch.zeros((sz, sz), device=self._device)
+        mask = torch.zeros((sz, sz), device=self.device)
         for i in range(sz):
             query_idx = perm[i]
             masked_keys = perm[i + 1:]
             mask[query_idx, masked_keys] = float('-inf')
         content_mask = mask[:-1, :-1].clone()
-        mask[torch.eye(sz, dtype=torch.bool, device=self._device)] = float('-inf')  # mask "self"
+        mask[torch.eye(sz, dtype=torch.bool, device=self.device)] = float('-inf')  # mask "self"
         query_mask = mask[1:, :-1]
         return content_mask, query_mask
 
     def training_step(self, batch, batch_idx):
         images, labels = batch
-        tgt = self.tokenizer.encode(labels, self._device)
+        tgt = self.tokenizer.encode(labels, self.device)
 
         # Encode the source sequence (i.e. the image codes)
         memory = self.encode(images)
