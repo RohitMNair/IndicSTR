@@ -4,6 +4,7 @@ from torch import Tensor
 from typing import Optional, Sequence
 from itertools import permutations
 from .decoder import Decoder, TokenEmbedding
+from data.tokenizer import HindiPARSeqTokenizer
 import torch.nn as nn
 import torch
 import numpy as np
@@ -51,6 +52,7 @@ class HindiPARSeq(HindiBaseSystem):
         self.rng = np.random.default_rng()
         self.max_gen_perms = perm_num // 2 if perm_mirrored else perm_num
 
+        self.tokenizer = HindiPARSeqTokenizer(threshold= threshold, max_grps= max_grps)
         self.encoder = FocalNetEncoder(
             hidden_dropout_prob= self.dropout, 
             initializer_range = self.initializer_range,
@@ -295,11 +297,11 @@ class HindiPARSeq(HindiBaseSystem):
     def training_step(self, batch, batch_idx):
         imgs, labels = batch
         batch_size = len(labels)
-        h_c_2_targets, h_c_1_targets, f_c_targets, d_c_targets = (
-                                  torch.zeros(batch_size, self.max_grps, device= self.device, dtype= torch.long),
-                                  torch.zeros(batch_size, self.max_grps, device= self.device, dtype= torch.long),
-                                  torch.zeros(batch_size, self.max_grps, device= self.device, dtype= torch.long),
-                                  torch.zeros(batch_size, self.max_grps, self.num_d_classes, device= self.device),
+        h_c_2_targets, h_c_1_targets, f_c_targets, d_c_targets = ( # +2 for eos and bos
+                                  torch.zeros(batch_size, self.max_grps + 2, device= self.device, dtype= torch.long),
+                                  torch.zeros(batch_size, self.max_grps + 2, device= self.device, dtype= torch.long),
+                                  torch.zeros(batch_size, self.max_grps + 2, device= self.device, dtype= torch.long),
+                                  torch.zeros(batch_size, self.max_grps + 2, self.num_d_classes, device= self.device),
                                 )
         
         n_grps = [self.max_grps for i in range(batch_size)]
