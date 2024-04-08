@@ -1,7 +1,7 @@
 from model.base import HindiBaseSystem, MalayalamBaseSystem
 from model.FocalSTR.encoder import FocalNetEncoder
 from torch import Tensor
-from typing import Optional, Sequence, Union
+from typing import Optional, Sequence, Union, Tuple
 from itertools import permutations
 from .decoder import Decoder, TokenEmbedding
 from model.head import HindiGrpClassifier
@@ -305,7 +305,7 @@ class HindiPARSeq(HindiBaseSystem):
         mask[torch.eye(sz, dtype=torch.bool, device=self.device)] = True  # mask "self"
         query_mask = mask[1:, :-1]
         return content_mask, query_mask
-
+    
     def training_step(self, batch, batch_idx):
         imgs, labels = batch
         batch_size = len(labels)
@@ -364,7 +364,11 @@ class HindiPARSeq(HindiBaseSystem):
                 h_c_2_out = torch.where(h_c_2_out == self.tokenizer.eos_id, self.tokenizer.pad_id, h_c_2_out)
                 h_c_1_out = torch.where(h_c_1_out == self.tokenizer.eos_id, self.tokenizer.pad_id, h_c_1_out)
                 f_c_out = torch.where(f_c_out == self.tokenizer.eos_id, self.tokenizer.pad_id, f_c_out)
-                d_c_out = torch.where(d_c_out == self.tokenizer.eos_id, self.tokenizer.pad_id, d_c_out)
+                d_pad, d_eos = [torch.zeros(self.num_d_classes, device= self.device) for _ in range(2)]
+                d_pad[self.tokenizer.pad_id] = d_eos[self.tokenizer.eos_id] = 1.
+                d_c_eos = torch.all(d_c_out == d_eos, dim= -1)
+                d_c_out[d_c_eos] = d_pad
+
                 n = (f_c_out != self.tokenizer.pad_id).sum().item()
         loss /= loss_numel
 
@@ -497,8 +501,3 @@ class HindiPARSeq(HindiBaseSystem):
             "NED": self.ned,
         }
         self.log_dict(log_dict_epoch, on_step = False, on_epoch = True, prog_bar = False, logger = True, sync_dist = True, batch_size= batch_size)
-
-    def predict_step(self, batch):
-        (h_c_2_logits, h_c_1_logits, f_c_logits, d_logits) = self.forward(batch)
-        pred_labels = self.tokenizer.decode((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits))
-        return pred_labels, (h_c_2_logits, h_c_1_logits, f_c_logits, d_logits)

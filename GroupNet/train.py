@@ -9,7 +9,7 @@ from omegaconf import DictConfig
 from hydra.utils import instantiate
 from lightning.pytorch.plugins.environments import SLURMEnvironment
 
-
+torch.set_printoptions(profile="full")
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 torch.set_float32_matmul_precision('medium')
 print(f"Device: {device}")
