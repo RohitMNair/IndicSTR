@@ -30,12 +30,12 @@ class DecoderLayer(pl.LightningModule):
         - num_h_c (int, default= 2): number of halc-character classes
         - num_d_c (int, default= 2): number of diacritic classes
 
-        # Note: the specified heads must evenly divide d_model/3 and for each Sequence element is the
-        nhead, the Sequence elements must evenly divide d_model/(3 * len(seq))
+        # Note: the specified heads must evenly divide d_model and for each Sequence element is the
+        nhead, the Sequence elements must evenly divide d_model
         eg: [[2,2], 4, [2,2]] here 2 heads for each half_character, 4 heads for full character 
-            and 2 heads for each diacritic character. if the d_model is 768 ( 768 % 3 == 0)
-            and for half-char-1 it will be 2 heads with 64 dim each ((768/(3 * 2)) % 2 == 0) similarly for half char 2. 
-            Full character will have 4 heads with 64 dim. each. Diacritic will be same as half-char
+            and 2 heads for each diacritic character. if the d_model is 768 
+            and for half-char-1 it will be 2 heads with 384 dim each ((768/2) % 2 == 0) similarly for half char 2. 
+            Full character will have 4 heads with 192 dim. each. Diacritic will be same as half-char
         """
         super().__init__()
         self.d_model = d_model

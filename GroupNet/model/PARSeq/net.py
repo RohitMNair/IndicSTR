@@ -360,8 +360,11 @@ class HindiPARSeq(HindiBaseSystem):
             # After the second iteration (i.e. done with canonical and reverse orderings),
             # remove the [EOS] tokens for the succeeding perms
             if i == 1:
-                tgt_out = torch.where(f_c_targets == self.tokenizer.eos_id, self.tokenizer.pad_id, f_c_targets)
-                n = (tgt_out != self.tokenizer.pad_id).sum().item()
+                h_c_2_out = torch.where(h_c_2_out == self.tokenizer.eos_id, self.tokenizer.pad_id, h_c_2_out)
+                h_c_1_out = torch.where(h_c_1_out == self.tokenizer.eos_id, self.tokenizer.pad_id, h_c_1_out)
+                f_c_out = torch.where(f_c_out == self.tokenizer.eos_id, self.tokenizer.pad_id, f_c_targets)
+                d_c_out = torch.where(d_c_out == self.tokenizer.eos_id, self.tokenizer.pad_id, d_c_out)
+                n = (f_c_out != self.tokenizer.pad_id).sum().item()
         loss /= loss_numel
 
         self.log('loss_step', loss, prog_bar= True, on_step= True, on_epoch= False, logger = True, sync_dist = True, batch_size= batch_size)
