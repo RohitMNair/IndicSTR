@@ -326,27 +326,31 @@ class HindiPARSeq(HindiBaseSystem):
         # Prepare the target sequences (input and output)
         tgt_perms = self.gen_tgt_perms(f_c_targets)
         # ignore BOS tag
-        h_c_2_out, h_c_1_out, f_c_out, d_c_out = h_c_2_targets[:, 1:], h_c_1_targets[:,1:], f_c_targets[:,1:], d_c_targets[:,1:]
+        (h_c_2_out, h_c_1_out, f_c_out, d_c_out) = (h_c_2_targets[:, 1:], h_c_1_targets[:, 1:], 
+                                                                    f_c_targets[:, 1:], d_c_targets[:, 1:])
+        (h_c_2_in, h_c_1_in, f_c_in, d_c_in) = (h_c_2_targets[:, :-1], h_c_1_targets[:, :-1], 
+                                                                    f_c_targets[:, :-1], d_c_targets[:, :-1])
         # The [EOS] token is not depended upon by any other token in any permutation ordering
-        ctx_padding_mask = (f_c_out == self.tokenizer.pad_id) | (f_c_out == self.tokenizer.eos_id) # pads and eos are same accross char grps
+        # pads and eos are same accross char grps
+        ctx_padding_mask = (f_c_in == self.tokenizer.pad_id) | (f_c_in == self.tokenizer.eos_id) 
 
         loss = 0
         loss_numel = 0
-        n = (f_c_out != self.tokenizer.pad_id).sum().item()
+        n = (f_c_targets != self.tokenizer.pad_id).sum().item()
         for i, perm in enumerate(tgt_perms):
             tgt_mask, query_mask = self.generate_attn_masks(perm)
-            vals, indices = torch.topk(d_c_targets, k= self.num_d_c)
-            out = self.decode(h_c_ctx= [h_c_2_targets[:,:-1], h_c_1_targets[:,:-1]], f_c_ctx= f_c_targets[:,:-1], 
-                              d_c_ctx= [indices[:,:-1,i] for i in range(self.num_d_c)], # ignore the additional target for EOS
+            vals, indices = torch.topk(d_c_in, k= self.num_d_c)
+            out = self.decode(h_c_ctx= [h_c_2_in, h_c_1_in], f_c_ctx= f_c_in, 
+                              d_c_ctx= [indices[:,:,i] for i in range(self.num_d_c)], # ignore the additional target for EOS
                               memory= memory, query_mask=query_mask, context_key_padding_mask= ctx_padding_mask)
-            (h_c_2_logits, h_c_1_logits, f_c_logits, d_logits) = self.classifier(out)
+            (h_c_2_logits, h_c_1_logits, f_c_logits, d_c_logits) = self.classifier(out)
             
             # loss += n * F.cross_entropy(logits, tgt_out.flatten(), ignore_index=self.pad_id)
             # Get the flattened versions of the targets and the logits for grp level metrics
             ((flat_h_c_2_targets, flat_h_c_1_targets, flat_f_c_targets, flat_d_c_targets), 
             (flat_h_c_2_logits, flat_h_c_1_logits, flat_f_c_logits, flat_d_c_logits)) = self._get_flattened_non_pad(
                                                                                     targets= (h_c_2_out, h_c_1_out, f_c_out, d_c_out),
-                                                                                    logits= (h_c_2_logits, h_c_1_logits, f_c_logits, d_logits),
+                                                                                    logits= (h_c_2_logits, h_c_1_logits, f_c_logits, d_c_logits),
                                                                                 )
             loss += n * (self.h_c_2_loss(input= flat_h_c_2_logits, target= flat_h_c_2_targets) \
             + self.h_c_1_loss(input= flat_h_c_1_logits, target= flat_h_c_1_targets) \
@@ -356,11 +360,142 @@ class HindiPARSeq(HindiBaseSystem):
             # After the second iteration (i.e. done with canonical and reverse orderings),
             # remove the [EOS] tokens for the succeeding perms
             if i == 1:
-                tgt_out = torch.where(f_c_out == self.tokenizer.eos_id, self.tokenizer.pad_id, f_c_out)
+                tgt_out = torch.where(f_c_targets == self.tokenizer.eos_id, self.tokenizer.pad_id, f_c_targets)
                 n = (tgt_out != self.tokenizer.pad_id).sum().item()
         loss /= loss_numel
 
-        self.log('loss', loss)
+        self.log('loss_step', loss, prog_bar= True, on_step= True, on_epoch= False, logger = True, sync_dist = True, batch_size= batch_size)
+        self.log('loss_epoch', loss, prog_bar= True, on_step= False, on_epoch= True, logger = True, sync_dist = True, batch_size= batch_size)
         return loss
 
+    def validation_step(self, batch, batch_no)-> None:
+        # batch: img (BS x C x H x W), label (BS)
+        imgs, labels = batch
+        batch_size = len(labels)
+        h_c_2_targets, h_c_1_targets, f_c_targets, d_c_targets = (
+                                  torch.zeros(batch_size, self.max_grps + 2, device= self.device, dtype= torch.long),
+                                  torch.zeros(batch_size, self.max_grps + 2, device= self.device, dtype= torch.long),
+                                  torch.zeros(batch_size, self.max_grps + 2, device= self.device, dtype= torch.long),
+                                  torch.zeros(batch_size, self.max_grps + 2, self.num_d_classes, device= self.device),
+                                )
+        n_grps = [self.max_grps for i in range(batch_size)]
+        for idx,label in enumerate(labels, start= 0):
+            h_c_2_targets[idx], h_c_1_targets[idx], f_c_targets[idx], d_c_targets[idx], n_grps[idx] = self.tokenizer.label_encoder(label, device= self.device)
+        
+        (h_c_2_out, h_c_1_out, f_c_out, d_c_out) = (h_c_2_targets[:, 1:], h_c_1_targets[:, 1:], 
+                                                                    f_c_targets[:, 1:], d_c_targets[:, 1:])
+
+        (h_c_2_logits, h_c_1_logits, f_c_logits, d_c_logits) = self.forward(imgs)
+
+        # Get the flattened versions of the targets and the logits for grp level metrics
+        ((flat_h_c_2_targets, flat_h_c_1_targets, flat_f_c_targets, flat_d_targets), 
+        (flat_h_c_2_logits, flat_h_c_1_logits, flat_f_c_logits, flat_d_c_logits)) = self._get_flattened_non_pad(
+                                                                                targets= (h_c_2_out, h_c_1_out, f_c_out, d_c_out),
+                                                                                logits= (h_c_2_logits, h_c_1_logits, f_c_logits, d_c_logits),
+                                                                            )
+
+        # compute the loss for each group
+        loss = self.h_c_2_loss(input= flat_h_c_2_logits, target= flat_h_c_2_targets) \
+            + self.h_c_1_loss(input= flat_h_c_1_logits, target= flat_h_c_1_targets) \
+            + self.f_c_loss(input= flat_f_c_logits, target= flat_f_c_targets) \
+            + self.d_loss(input= flat_d_c_logits, target= flat_d_targets)
+        # Grp level metrics
+        self.val_h_c_2_acc(flat_h_c_2_logits, flat_h_c_2_targets)
+        self.val_h_c_1_acc(flat_h_c_1_logits, flat_h_c_1_targets)
+        self.val_comb_h_c_acc((flat_h_c_2_logits, flat_h_c_1_logits),\
+                               (flat_h_c_2_targets, flat_h_c_1_targets))
+        self.val_f_c_acc(flat_f_c_logits, flat_f_c_targets)
+        self.val_d_acc(flat_d_c_logits, flat_d_targets)
+        self.val_grp_acc((flat_h_c_2_logits, flat_h_c_1_logits, flat_f_c_logits, flat_d_c_logits),\
+                           (flat_h_c_2_targets, flat_h_c_1_targets, flat_f_c_targets, flat_d_targets))
+        # Word level metric
+        self.val_wrr2((h_c_2_logits, h_c_1_logits, f_c_logits, d_c_logits),\
+                     (h_c_2_out, h_c_1_out, f_c_out, d_c_out), self.tokenizer.pad_id)
+        # self.val_wrr(pred_strs= self.tokenizer.decode((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits)), target_strs= labels)
+        
+        if batch_no % 100000 == 0:
+            pred_labels = self.tokenizer.decode((h_c_2_logits, h_c_1_logits, f_c_logits, d_c_logits))            
+            self._log_tb_images(imgs[:5], pred_labels= pred_labels[:5], gt_labels= labels[:5], mode= "val")
+
+        # On epoch only logs
+        log_dict_epoch = {
+            "val_loss": loss,
+            "val_half_character2_acc": self.val_h_c_2_acc,
+            "val_half_character1_acc": self.val_h_c_1_acc,
+            "val_combined_half_character_acc": self.val_comb_h_c_acc,
+            "val_character_acc": self.val_f_c_acc,
+            "val_diacritic_acc": self.val_d_acc,
+            "val_wrr2": self.val_wrr2, 
+            "val_grp_acc": self.val_grp_acc,
+        }
+        self.log_dict(log_dict_epoch, on_step = False, on_epoch = True, prog_bar = False, logger = True, sync_dist = True, batch_size= batch_size)
+
+    def test_step(self, batch, batch_no)-> None:
+        # batch: img (BS x C x H x W), label (BS)
+        imgs, labels = batch
+        batch_size = len(labels)
+        h_c_2_targets, h_c_1_targets, f_c_targets, d_c_targets = (
+                                  torch.zeros(batch_size, self.max_grps + 2, device= self.device, dtype= torch.long),
+                                  torch.zeros(batch_size, self.max_grps + 2, device= self.device, dtype= torch.long),
+                                  torch.zeros(batch_size, self.max_grps + 2, device= self.device, dtype= torch.long),
+                                  torch.zeros(batch_size, self.max_grps + 2, self.num_d_classes, device= self.device),
+                                )
+        n_grps = [self.max_grps for i in range(batch_size)]
+        for idx,label in enumerate(labels, start= 0):
+            h_c_2_targets[idx], h_c_1_targets[idx], f_c_targets[idx], d_c_targets[idx], n_grps[idx] = self.tokenizer.label_encoder(label, device= self.device)
+        
+        (h_c_2_out, h_c_1_out, f_c_out, d_c_out) = (h_c_2_targets[:, 1:], h_c_1_targets[:, 1:], 
+                                                                    f_c_targets[:, 1:], d_c_targets[:, 1:])
+        (h_c_2_logits, h_c_1_logits, f_c_logits, d_c_logits) = self.forward(imgs)
+
+        # Get the flattened versions of the targets and the logits for grp level metrics
+        ((flat_h_c_2_targets, flat_h_c_1_targets, flat_f_c_targets, flat_d_targets), 
+        (flat_h_c_2_logits, flat_h_c_1_logits, flat_f_c_logits, flat_d_c_logits)) = self._get_flattened_non_pad(
+                                                                                targets= (h_c_2_out, h_c_1_out, f_c_out, d_c_out),
+                                                                                logits= (h_c_2_logits, h_c_1_logits, f_c_logits, d_c_logits),
+                                                                            )
+
+        # compute the loss for each group
+        loss = self.h_c_2_loss(input= flat_h_c_2_logits, target= flat_h_c_2_targets) \
+            + self.h_c_1_loss(input= flat_h_c_1_logits, target= flat_h_c_1_targets) \
+            + self.f_c_loss(input= flat_f_c_logits, target= flat_f_c_targets) \
+            + self.d_loss(input= flat_d_c_logits, target= flat_d_targets)
+        
+        # Grp level metrics
+        self.test_h_c_2_acc(flat_h_c_2_logits, flat_h_c_2_targets)
+        self.test_h_c_1_acc(flat_h_c_1_logits, flat_h_c_1_targets)
+        self.test_comb_h_c_acc((flat_h_c_2_logits, flat_h_c_1_logits),\
+                                (flat_h_c_2_targets, flat_h_c_1_targets))
+        self.test_f_c_acc(flat_f_c_logits, flat_f_c_targets)
+        self.test_d_acc(flat_d_c_logits, flat_d_targets)
+        self.test_grp_acc((flat_h_c_2_logits, flat_h_c_1_logits, flat_f_c_logits, flat_d_c_logits),\
+                           (flat_h_c_2_targets, flat_h_c_1_targets, flat_f_c_targets, flat_d_targets))
+        
+        # Word level metric
+        self.test_wrr2((h_c_2_logits, h_c_1_logits, f_c_logits, d_c_logits),\
+                      (h_c_2_out, h_c_1_out, f_c_out, d_c_out), self.tokenizer.pad_id)
+        pred_labels= self.tokenizer.decode((h_c_2_logits, h_c_1_logits, f_c_logits, d_c_logits))
+        self.test_wrr(pred_strs= pred_labels, target_strs= labels)        
+        self.ned(pred_labels= pred_labels, target_labels= labels)
+        self._log_tb_images(imgs, pred_labels= pred_labels, gt_labels= labels, mode= "test")
+            
+        # On epoch only logs
+        log_dict_epoch = {
+            "test_loss": loss,
+            "test_half_character2_acc": self.test_h_c_2_acc,
+            "test_half_character1_acc": self.test_h_c_1_acc,
+            "test_combined_half_character_acc": self.test_comb_h_c_acc,
+            "test_character_acc": self.test_f_c_acc,
+            "test_diacritic_acc": self.test_d_acc,
+            "test_wrr": self.test_wrr, 
+            "test_wrr2": self.test_wrr2,
+            "test_grp_acc": self.test_grp_acc,
+            "NED": self.ned,
+        }
+        self.log_dict(log_dict_epoch, on_step = False, on_epoch = True, prog_bar = False, logger = True, sync_dist = True, batch_size= batch_size)
+
+    def predict_step(self, batch):
+        (h_c_2_logits, h_c_1_logits, f_c_logits, d_logits) = self.forward(batch)
+        pred_labels = self.tokenizer.decode((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits))
+        return pred_labels, (h_c_2_logits, h_c_1_logits, f_c_logits, d_logits)
 
