@@ -12,6 +12,113 @@ import torch.nn as nn
 import torch
 import lightning.pytorch.loggers as pl_loggers
 
+class GrpNetBaseSystem(pl.LightningModule):
+    """
+    base system for group nets
+    """
+    def __init__(self, threshold:float= 0.5, learning_rate:float= 1e-4,
+                 weight_decay:float= 1.0e-4, warmup_pct:float= 0.3):
+        super().__init__()
+        self.lr = learning_rate
+        self.weight_decay = weight_decay
+        self.pct_start = warmup_pct
+        pass
+
+    def _log_tb_images(self, viz_batch:Tensor, pred_labels:tuple, gt_labels:tuple, mode:str= "test") -> None:
+        """
+        Function to display a batch and its predictions to tensorboard
+        Args:
+        - viz_batch (Tensor): images of a batch to be visualized
+        - labels (tuple): corresponding lables of images in the batch
+        - mode (str): "test" | "train" | "val"
+
+        Returns: None
+        """
+        assert mode in ("test", "train", "val"), "Invalid mode"
+        # Get tensorboard logger
+        tb_logger = None
+        for logger in self.trainer.loggers:
+            if isinstance(logger, pl_loggers.TensorBoardLogger):
+                tb_logger = logger.experiment
+                break
+
+        if tb_logger is None:
+                raise ValueError('TensorBoard Logger not found')
+
+        assert gt_labels is not None, "gt_labels cannot be none"
+        assert pred_labels is not None, "pred_labels cannot be none"
+        # Log the images (Give them different names)
+        _mean_ = torch.tensor([0.485, 0.456, 0.406], device= self.device)
+        _std_ = torch.tensor([0.229, 0.224, 0.225], device= self.device)
+        _mean_ = _mean_.view(1, 3, 1, 1).expand_as(viz_batch)
+        _std_ = _std_.view(1, 3, 1, 1).expand_as(viz_batch)
+        unnorm_viz_batch = viz_batch * _std_ + _mean_
+        unnorm_viz_batch = torch.clamp(unnorm_viz_batch, 0, 1)
+        for img_idx in range(unnorm_viz_batch.shape[0]):
+            img = unnorm_viz_batch[img_idx]
+            tb_logger.add_image(f"{mode}/{self.global_step}_pred-{pred_labels[img_idx]}_gt-{gt_labels[img_idx]}", img, 0)
+    
+    def configure_optimizers(self)-> dict:
+        optimizer = AdamW(params= self.parameters(), lr= self.lr, weight_decay= self.weight_decay)
+        lr_scheduler = OneCycleLR(
+            optimizer= optimizer,
+            max_lr= self.lr,
+            total_steps= int(self.trainer.estimated_stepping_batches), # gets the max training steps
+            pct_start= self.pct_start,
+            cycle_momentum= False,
+        )
+        return {
+            'optimizer': optimizer,
+            'lr_scheduler': {
+                'scheduler': lr_scheduler,
+                'interval': 'step',
+            }
+        }
+
+    def _get_flattened_non_pad(self, targets: Tuple[Tensor, Tensor, Tensor, Tensor],
+                                logits: Tuple[Tensor, Tensor, Tensor, Tensor]):
+        """
+        Function which returns a flattened version of the targets and logits, it flattens the group dimension
+        Args:
+        - targets (tuple(Tensor, Tensor, Tensor, Tensor)): A tuple consisting of half-char 2, half-char 1, full char, & diacritic targets
+        - logits (tuple(Tensor, Tensor, Tensor, Tensor)): A tuple consisting of half-char 2, half-char 1, full char, & diacritic logits
+
+        Returns:
+        - tuple(tuple(Tensor, Tensor, Tensor, Tensor), 
+            tuple(Tensor, Tensor, Tensor, Tensor)): (half-char 2, half-char 1, full char, & diacritic targets), 
+                                                    (half-char 2, half-char 1, full char, & diacritic logits)
+        """
+        h_c_2_targets, h_c_1_targets, f_c_targets, d_targets = targets
+        h_c_2_logits, h_c_1_logits, f_c_logits, d_logits = logits
+
+        flat_h_c_2_targets = h_c_2_targets.reshape(-1)
+        flat_h_c_1_targets = h_c_1_targets.reshape(-1)
+        flat_f_c_targets = f_c_targets.reshape(-1)
+        flat_d_targets = d_targets.reshape(-1, self.num_d_classes)
+        # print(f"The Flattened Targets {flat_h_c_2_targets}\n{flat_h_c_1_targets}\n{flat_f_c_targets}\n{flat_d_targets}\n\n")
+
+        flat_h_c_2_non_pad = (flat_h_c_2_targets != self.tokenizer.pad_id)
+        flat_h_c_1_non_pad = (flat_h_c_1_targets != self.tokenizer.pad_id)
+        flat_f_c_non_pad = (flat_f_c_targets != self.tokenizer.pad_id)
+        d_pad = torch.zeros(self.num_d_classes, dtype = torch.float32, device= self.device)
+        d_pad[self.tokenizer.pad_id] = 1.
+        flat_d_non_pad = ~ torch.all(flat_d_targets == d_pad, dim= 1)
+        assert torch.all((flat_h_c_2_non_pad == flat_h_c_1_non_pad) == (flat_f_c_non_pad == flat_d_non_pad)).item(), \
+                "Pads are not aligned properly"
+
+        flat_h_c_2_targets = flat_h_c_2_targets[flat_h_c_2_non_pad]
+        flat_h_c_1_targets = flat_h_c_1_targets[flat_h_c_2_non_pad]
+        flat_f_c_targets = flat_f_c_targets[flat_h_c_2_non_pad]
+        flat_d_targets = flat_d_targets[flat_h_c_2_non_pad]
+
+        flat_h_c_2_logits = h_c_2_logits.reshape(-1, self.num_h_c_classes)[flat_h_c_2_non_pad]
+        flat_h_c_1_logits = h_c_1_logits.reshape(-1, self.num_h_c_classes)[flat_h_c_2_non_pad]
+        flat_f_c_logits = f_c_logits.reshape(-1, self.num_f_c_classes)[flat_h_c_2_non_pad]
+        flat_d_logits = d_logits.reshape(-1, self.num_d_classes)[flat_h_c_2_non_pad]
+
+        return ((flat_h_c_2_targets, flat_h_c_1_targets, flat_f_c_targets, flat_d_targets), 
+                (flat_h_c_2_logits, flat_h_c_1_logits, flat_f_c_logits, flat_d_logits))
+    pass
 class DevanagariBaseSystem(pl.LightningModule):
     """
     Base system for Hindi GroupNets STR

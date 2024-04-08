@@ -242,3 +242,10 @@ class TokenEmbedding(pl.LightningModule):
         f_c_emb = math.sqrt(self.embed_dim) * self.f_c_embedding(f_c_tokens)
         d_c_emb = [math.sqrt(self.embed_dim) * self.d_c_embedding[i](d_c_t) for i, d_c_t in enumerate(d_c_tokens)]
         return h_c_emb, f_c_emb, d_c_emb
+
+class FixedTokenEmbedding(pl.LightningModule):
+    def __init__(self, ):
+        pass
+
+    def forward(self,):
+        pass

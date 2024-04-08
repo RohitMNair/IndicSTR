@@ -10,9 +10,7 @@ class HindiViTSTR(HindiBaseSystem):
     """
     Group implementation of ViTSTR
     """
-    def __init__(self, svar:list, vyanjan:list, matras:list, ank:list, chinh:list,
-                 nukthas:list, halanth:str, hidden_size: int = 768,
-                 num_hidden_layers: int = 12, num_attention_heads: int = 12,
+    def __init__(self, hidden_size: int = 768, num_hidden_layers: int = 12, num_attention_heads: int = 12,
                  mlp_ratio: float= 4.0, hidden_dropout_prob: float = 0.0,
                  attention_probs_dropout_prob: float = 0.0, initializer_range: float = 0.02,
                  layer_norm_eps: float = 1e-12, image_size: int = 224, patch_size: int = 16, 
@@ -20,10 +18,8 @@ class HindiViTSTR(HindiBaseSystem):
                  learning_rate: float= 1e-4, weight_decay: float= 1.0e-4, warmup_pct:float= 0.3):
         
         max_grps = (image_size // patch_size)**2 + 1
-        super().__init__(svar = svar, vyanjan= vyanjan, matras= matras, ank= ank, chinh= chinh, 
-                         nukthas= nukthas, halanth= halanth, max_grps= max_grps, hidden_size= hidden_size,
-                         threshold= threshold, learning_rate= learning_rate, weight_decay= weight_decay,
-                         warmup_pct= warmup_pct)
+        super().__init__(max_grps= max_grps, hidden_size= hidden_size, threshold= threshold,
+                         learning_rate= learning_rate, weight_decay= weight_decay, warmup_pct= warmup_pct)
         self.save_hyperparameters()
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
