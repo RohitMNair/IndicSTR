@@ -368,7 +368,6 @@ class HindiPARSeq(HindiBaseSystem):
                 d_pad[self.tokenizer.pad_id] = d_eos[self.tokenizer.eos_id] = 1.
                 d_c_eos = torch.all(d_c_out == d_eos, dim= -1)
                 d_c_out[d_c_eos] = d_pad
-
                 n = (f_c_out != self.tokenizer.pad_id).sum().item()
         loss /= loss_numel
 

@@ -123,20 +123,54 @@ class DecoderLayer(pl.LightningModule):
 
     def forward(self, query:Tensor, context_h_c:Sequence[Tensor], context_f_c:Tensor, context_d_c:Sequence[Tensor], 
                 memory:Tensor, query_mask: Optional[Tensor] = None, context_key_padding_mask: Optional[Tensor] = None):
+        """
+        Performs QKV context-position and image-position attention
+        Args:
+        - query (Tensor): position embeddings
+        - context_h_c (Sequence[Tensor]): half-character context in a list eg:[half-char 2, half-char 1]
+        - context_f_c (Tensor): full character context
+        - context_d_c (Tensor): diacritic context in a list eg [diac-1, diac-2] # order is irrelevant
+        - memory (Tensor): image embeddings from the encoder
+        - query_mask (Optional[Tensor], default= None): attention mask for context-position multihead attention
+        - context_key_padding_mask (Optional[Tensor], default = None): padding mask for context-position attention
+        
+        Returns:
+        - Tensor (query): Decoder hidden state
+        """
         query_norm = self.norm_q(query)
         context_h_c_norm = [self.norm_ctx_h_c[i](context_h_c_i) for i, context_h_c_i in enumerate(context_h_c)]
         context_f_c_norm = self.norm_ctx_f_c(context_f_c)
         context_d_c_norm = [self.norm_ctx_d_c[i](context_d_c_i) for i, context_d_c_i in enumerate(context_d_c)]
-        query = self.forward_stream(query, query_norm, context_h_c_norm, context_f_c_norm, context_d_c_norm,
-                                    memory, query_mask, context_key_padding_mask)[0]
+        query = self.forward_stream(query= query, query_norm=query_norm, h_c_kv= context_h_c_norm, 
+                                    f_c_kv= context_f_c_norm, d_c_kv= context_d_c_norm, memory= memory, 
+                                    query_mask= query_mask, key_padding_mask= context_key_padding_mask)[0]
         return query
 
 class Decoder(pl.LightningModule):
+    """Creates a Decoder stack"""
     __constants__ = ['norm']
 
-    def __init__(self, d_model:int,nhead_self_attn:Sequence[Union[int,Sequence[int]]], nhead_cross_attn:int, 
-                 dim_feedforward= 2048, dropout= 0.1, activation='GELU', 
-                 layer_norm_eps=1e-5, num_h_c:int = 2, num_d_c:int = 2, num_layers:int = 1):
+    def __init__(self, d_model:int, nhead_self_attn:Sequence[Union[int,Sequence[int]]], nhead_cross_attn:int, 
+                 dim_feedforward:int= 2048, dropout:float= 0.1, activation:str= 'GELU', 
+                 layer_norm_eps:float= 1e-5, num_h_c:int = 2, num_d_c:int = 2, num_layers:int = 1)-> None:
+        """
+        constructor for Decoder
+        Args:
+        - d_model (int): dimension of the decoder feature vectors
+        - nhead_self_attn (Sequence[Union[int,Sequence[int]]]): number of multi-head attention heads for each character category
+                            -- index-0: Sequence[int] for nheads of half-character
+                            -- index-1: int for nheads for full-character
+                            -- index-2: Sequnce[int] for nheads of diacritic-character
+        - nhead_cross_attn (int) : number of attention heads for cross attention
+        - dim_feedforward (int, default= 2048): 
+        - dropout= 0.1:dimension of the intermediate Dense or Linear layer in the MLP
+        - dropout (float, default= 0.1): dropout probability
+        - activation (str, default= 'GELU'): string name of activation as specified in torch.nn
+        - layer_norm_eps (float, default= 1e-5): value of epsilon in layer norm
+        - num_h_c (int, default= 2): number of halc-character classes
+        - num_d_c (int, default= 2): number of diacritic classes
+        - num_layers (int, default = 1): number of decoder layers 
+        """
         super().__init__()
         self.layers = nn.ModuleList([DecoderLayer(d_model, nhead_self_attn= nhead_self_attn,
                                     nhead_cross_attn= nhead_cross_attn,
@@ -149,15 +183,40 @@ class Decoder(pl.LightningModule):
 
     def forward(self, query:Tensor, context_h_c:Sequence[Tensor], context_f_c:Tensor, context_d_c:Sequence[Tensor],
                 memory, query_mask: Optional[Tensor] = None, context_key_padding_mask: Optional[Tensor] = None):
+        """
+        Performs a forward pass of the decoder stack (NOTE: This does not implement context-context update as 
+        provided in original work)
+        Args:
+        - query (Tensor): position embeddings
+        - context_h_c (Sequence[Tensor]): half-character context in a list eg:[half-char 2, half-char 1]
+        - context_f_c (Tensor): full character context
+        - context_d_c (Tensor): diacritic context in a list eg [diac-1, diac-2] # order is irrelevant
+        - memory (Tensor): image embeddings from the encoder
+        - query_mask (Optional[Tensor], default= None): attention mask for context-position multihead attention
+        - context_key_padding_mask (Optional[Tensor], default = None): padding mask for context-position attention
+
+        Returns:
+        - Tensor(query): decoder output embeddings
+        """
         for layer in self.layers:
             query = layer(query, context_h_c, context_f_c, context_d_c, memory, query_mask, context_key_padding_mask)
         query = self.norm(query)
         return query
 
 class TokenEmbedding(pl.LightningModule):
-
+    """Learned token embeddings"""
     def __init__(self, h_c_charset_size: int, f_c_charset_size:int, d_c_charset_size:int, 
                  embed_dim:int, num_h_c:int = 2, num_d_c:int = 2):
+        """
+        Constructor for learned token embeddings for PARSeq
+        Args:
+        - h_c_charset_size (int): half characterset size
+        - f_c_charset_size (int): full characterset size
+        - d_c_charset_size (int): diacritic characterset size
+        - embed_dim (int): dimension for the token embeddings
+        - num_h_c (int, default = 2): number of half character
+        - num_d_c (int, default = 2): number of diacritic characters
+        """
         super().__init__()
         self.h_c_embedding = nn.ModuleList([nn.Embedding(num_embeddings=h_c_charset_size, embedding_dim=embed_dim)
                                 for _ in range(num_h_c)])
@@ -167,6 +226,18 @@ class TokenEmbedding(pl.LightningModule):
         self.embed_dim = embed_dim
 
     def forward(self, h_c_tokens: Sequence[Tensor], f_c_tokens:Tensor, d_c_tokens:Sequence[Tensor]):
+        """
+        Returns token embeddings
+        Args:
+        - h_c_tokens (Sequence[Tensor]):
+        - f_c_tokens (Tensor):
+        - d_c_tokens (Sequence[Tensor]):
+
+        Returns:
+        - Sequence[Tensor] (h_c_emb): half-character embeddings
+        - Tensor (f_c_emb): full-character embeddings
+        - Sequence[Tensor] (d_c_emb): diacritic embeddings
+        """
         h_c_emb = [math.sqrt(self.embed_dim) * self.h_c_embedding[i](h_c_t) for i,h_c_t in enumerate(h_c_tokens)]
         f_c_emb = math.sqrt(self.embed_dim) * self.f_c_embedding(f_c_tokens)
         d_c_emb = [math.sqrt(self.embed_dim) * self.d_c_embedding[i](d_c_t) for i, d_c_t in enumerate(d_c_tokens)]
