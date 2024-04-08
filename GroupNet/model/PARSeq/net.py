@@ -107,9 +107,9 @@ class HindiPARSeq(HindiBaseSystem):
 
         # +1 for <eos>
         self.pos_queries = nn.Parameter(torch.Tensor(1, max_grps + 1, self.hidden_sizes[-1])) # +1 for eos
-        self.h_c_ctx_dropout = [nn.Dropout(dropout) for _ in range(self.num_h_c)]
+        self.h_c_ctx_dropout = nn.ModuleList([nn.Dropout(dropout) for _ in range(self.num_h_c)])
         self.f_c_ctx_dropout = nn.Dropout(dropout)
-        self.d_c_ctx_dropout = [nn.Dropout(dropout) for _ in range(self.num_d_c)]
+        self.d_c_ctx_dropout = nn.ModuleList([nn.Dropout(dropout) for _ in range(self.num_d_c)])
         self.pos_dropout = nn.Dropout(dropout)
         nn.init.trunc_normal_(self.pos_queries, std=.02)
 
@@ -316,7 +316,7 @@ class HindiPARSeq(HindiBaseSystem):
                                   torch.zeros(batch_size, self.max_grps + 2, self.num_d_classes, device= self.device),
                                 )
         
-        n_grps = [self.max_grps for i in range(batch_size)]
+        n_grps = [self.max_grps + 1 for i in range(batch_size)]
         for idx,label in enumerate(labels, start= 0):
             h_c_2_targets[idx], h_c_1_targets[idx], f_c_targets[idx], d_c_targets[idx], n_grps[idx] = self.tokenizer.label_encoder(label, device= self.device)
 
@@ -365,7 +365,7 @@ class HindiPARSeq(HindiBaseSystem):
         loss /= loss_numel
 
         self.log('loss_step', loss, prog_bar= True, on_step= True, on_epoch= False, logger = True, sync_dist = True, batch_size= batch_size)
-        self.log('loss_epoch', loss, prog_bar= True, on_step= False, on_epoch= True, logger = True, sync_dist = True, batch_size= batch_size)
+        self.log('loss_epoch', loss, prog_bar= False, on_step= False, on_epoch= True, logger = True, sync_dist = True, batch_size= batch_size)
         return loss
 
     def validation_step(self, batch, batch_no)-> None:
@@ -381,7 +381,7 @@ class HindiPARSeq(HindiBaseSystem):
         n_grps = [self.max_grps for i in range(batch_size)]
         for idx,label in enumerate(labels, start= 0):
             h_c_2_targets[idx], h_c_1_targets[idx], f_c_targets[idx], d_c_targets[idx], n_grps[idx] = self.tokenizer.label_encoder(label, device= self.device)
-        
+        # ignore BOS
         (h_c_2_out, h_c_1_out, f_c_out, d_c_out) = (h_c_2_targets[:, 1:], h_c_1_targets[:, 1:], 
                                                                     f_c_targets[:, 1:], d_c_targets[:, 1:])
 
@@ -394,7 +394,7 @@ class HindiPARSeq(HindiBaseSystem):
                                                                                 logits= (h_c_2_logits, h_c_1_logits, f_c_logits, d_c_logits),
                                                                             )
 
-        # compute the loss for each group
+        # compute the loss for each character category
         loss = self.h_c_2_loss(input= flat_h_c_2_logits, target= flat_h_c_2_targets) \
             + self.h_c_1_loss(input= flat_h_c_1_logits, target= flat_h_c_1_targets) \
             + self.f_c_loss(input= flat_f_c_logits, target= flat_f_c_targets) \
@@ -498,4 +498,3 @@ class HindiPARSeq(HindiBaseSystem):
         (h_c_2_logits, h_c_1_logits, f_c_logits, d_logits) = self.forward(batch)
         pred_labels = self.tokenizer.decode((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits))
         return pred_labels, (h_c_2_logits, h_c_1_logits, f_c_logits, d_logits)
-

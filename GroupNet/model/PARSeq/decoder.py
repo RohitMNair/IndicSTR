@@ -48,11 +48,11 @@ class DecoderLayer(pl.LightningModule):
         self.num_h_c = num_h_c
         self.num_d_c = num_d_c
         # 0th index will correspond to h_c_n and ith index will correspond to h_c_(n-i)
-        self.self_attn_h_c = [nn.MultiheadAttention(d_model, nhead_self_attn[0][i], 
-                                                    dropout= dropout, batch_first= True) for i in range(num_h_c)]
+        self.self_attn_h_c = nn.ModuleList([nn.MultiheadAttention(d_model, nhead_self_attn[0][i], 
+                                                    dropout= dropout, batch_first= True) for i in range(num_h_c)])
         self.self_attn_f_c = nn.MultiheadAttention(d_model, nhead_self_attn[1], dropout=dropout, batch_first=True)
-        self.self_attn_d_c = [nn.MultiheadAttention(d_model, nhead_self_attn[2][i],
-                                                    dropout=dropout, batch_first=True) for i in range(num_d_c)]
+        self.self_attn_d_c = nn.ModuleList([nn.MultiheadAttention(d_model, nhead_self_attn[2][i],
+                                                    dropout=dropout, batch_first=True) for i in range(num_d_c)])
 
         # for merging representations
         self.norm_merge = nn.LayerNorm(d_model*(num_h_c + 1 + num_d_c), eps= layer_norm_eps)
@@ -72,9 +72,9 @@ class DecoderLayer(pl.LightningModule):
         self.norm1 = nn.LayerNorm(d_model, eps=layer_norm_eps)
         self.norm2 = nn.LayerNorm(d_model, eps=layer_norm_eps)
         self.norm_q = nn.LayerNorm(d_model, eps=layer_norm_eps)
-        self.norm_ctx_h_c = [nn.LayerNorm(d_model, eps=layer_norm_eps) for _ in range(num_h_c)]
+        self.norm_ctx_h_c = nn.ModuleList([nn.LayerNorm(d_model, eps=layer_norm_eps) for _ in range(num_h_c)])
         self.norm_ctx_f_c = nn.LayerNorm(d_model, eps=layer_norm_eps)
-        self.norm_ctx_d_c = [nn.LayerNorm(d_model, eps=layer_norm_eps) for _ in range(num_d_c)]
+        self.norm_ctx_d_c = nn.ModuleList([nn.LayerNorm(d_model, eps=layer_norm_eps) for _ in range(num_d_c)])
 
         self.dropout1 = nn.Dropout(dropout)
         self.dropout2 = nn.Dropout(dropout)
@@ -138,12 +138,12 @@ class Decoder(pl.LightningModule):
                  dim_feedforward= 2048, dropout= 0.1, activation='GELU', 
                  layer_norm_eps=1e-5, num_h_c:int = 2, num_d_c:int = 2, num_layers:int = 1):
         super().__init__()
-        self.layers = [DecoderLayer(d_model, nhead_self_attn= nhead_self_attn,
+        self.layers = nn.ModuleList([DecoderLayer(d_model, nhead_self_attn= nhead_self_attn,
                                     nhead_cross_attn= nhead_cross_attn,
                                     dim_feedforward=dim_feedforward,
                                     dropout= dropout, activation= activation,
                                     layer_norm_eps=layer_norm_eps, 
-                                    num_h_c = num_h_c, num_d_c= num_d_c) for _ in range(num_layers)]
+                                    num_h_c = num_h_c, num_d_c= num_d_c) for _ in range(num_layers)])
         self.num_layers = num_layers
         self.norm = nn.LayerNorm(d_model)
 
@@ -159,11 +159,11 @@ class TokenEmbedding(pl.LightningModule):
     def __init__(self, h_c_charset_size: int, f_c_charset_size:int, d_c_charset_size:int, 
                  embed_dim:int, num_h_c:int = 2, num_d_c:int = 2):
         super().__init__()
-        self.h_c_embedding = [nn.Embedding(num_embeddings=h_c_charset_size, embedding_dim=embed_dim)
-                                for _ in range(num_h_c)]
+        self.h_c_embedding = nn.ModuleList([nn.Embedding(num_embeddings=h_c_charset_size, embedding_dim=embed_dim)
+                                for _ in range(num_h_c)])
         self.f_c_embedding = nn.Embedding(num_embeddings=f_c_charset_size, embedding_dim=embed_dim)
-        self.d_c_embedding = [nn.Embedding(num_embeddings=d_c_charset_size, embedding_dim=embed_dim)
-                                for _ in range(num_d_c)]
+        self.d_c_embedding = nn.ModuleList([nn.Embedding(num_embeddings=d_c_charset_size, embedding_dim=embed_dim)
+                                for _ in range(num_d_c)])
         self.embed_dim = embed_dim
 
     def forward(self, h_c_tokens: Sequence[Tensor], f_c_tokens:Tensor, d_c_tokens:Sequence[Tensor]):
