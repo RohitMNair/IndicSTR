@@ -1555,7 +1555,7 @@ class HindiPARSeqTokenizer:
         for idx,grp in enumerate(grps, start= 0):
             h_c_2_target[idx], h_c_1_target[idx], f_c_target[idx], d_target[idx] = self.grp_class_encoder(grp=grp)
 
-        return h_c_2_target.to(device), h_c_1_target.to(device), f_c_target.to(device), d_target.to(device), len(grps)
+        return h_c_2_target.to(device), h_c_1_target.to(device), f_c_target.to(device), d_target.to(device), len(grps) + 2
     
     def _decode_grp(self, h_c_2_pred:Tensor,h_c_1_pred:Tensor, f_c_pred:Tensor, 
                     d_pred:Tensor, d_max:Tensor)-> str:

@@ -316,20 +316,22 @@ class HindiPARSeq(HindiBaseSystem):
                                   torch.zeros(batch_size, self.max_grps + 2, self.num_d_classes, device= self.device),
                                 )
         
-        n_grps = [self.max_grps + 1 for i in range(batch_size)]
+        n_grps = [self.max_grps + 2 for _ in range(batch_size)]
         for idx,label in enumerate(labels, start= 0):
             h_c_2_targets[idx], h_c_1_targets[idx], f_c_targets[idx], d_c_targets[idx], n_grps[idx] = self.tokenizer.label_encoder(label, device= self.device)
-
+        
+        # Truncate grps to largest in batch
+        num_grps = max(n_grps)
         # Encode the source sequence (i.e. the image codes)
         memory = self.encoder(imgs)
 
         # Prepare the target sequences (input and output)
-        tgt_perms = self.gen_tgt_perms(f_c_targets)
+        tgt_perms = self.gen_tgt_perms(f_c_targets[:,:num_grps])
         # ignore BOS tag
-        (h_c_2_out, h_c_1_out, f_c_out, d_c_out) = (h_c_2_targets[:, 1:], h_c_1_targets[:, 1:], 
-                                                                    f_c_targets[:, 1:], d_c_targets[:, 1:])
-        (h_c_2_in, h_c_1_in, f_c_in, d_c_in) = (h_c_2_targets[:, :-1], h_c_1_targets[:, :-1], 
-                                                                    f_c_targets[:, :-1], d_c_targets[:, :-1])
+        (h_c_2_out, h_c_1_out, f_c_out, d_c_out) = (h_c_2_targets[:, 1:num_grps], h_c_1_targets[:, 1:num_grps], 
+                                                                    f_c_targets[:, 1:num_grps], d_c_targets[:, 1:num_grps])
+        (h_c_2_in, h_c_1_in, f_c_in, d_c_in) = (h_c_2_targets[:, :num_grps -1], h_c_1_targets[:, :num_grps -1], 
+                                                                    f_c_targets[:, :num_grps -1], d_c_targets[:, :num_grps -1])
         # The [EOS] token is not depended upon by any other token in any permutation ordering
         # pads and eos are same accross char grps
         ctx_padding_mask = (f_c_in == self.tokenizer.pad_id) | (f_c_in == self.tokenizer.eos_id) 
@@ -344,7 +346,6 @@ class HindiPARSeq(HindiBaseSystem):
                               d_c_ctx= [indices[:,:,i] for i in range(self.num_d_c)], # ignore the additional target for EOS
                               memory= memory, query_mask=query_mask, context_key_padding_mask= ctx_padding_mask)
             (h_c_2_logits, h_c_1_logits, f_c_logits, d_c_logits) = self.classifier(out)
-            
             # loss += n * F.cross_entropy(logits, tgt_out.flatten(), ignore_index=self.pad_id)
             # Get the flattened versions of the targets and the logits for grp level metrics
             ((flat_h_c_2_targets, flat_h_c_1_targets, flat_f_c_targets, flat_d_c_targets), 
@@ -362,7 +363,7 @@ class HindiPARSeq(HindiBaseSystem):
             if i == 1:
                 h_c_2_out = torch.where(h_c_2_out == self.tokenizer.eos_id, self.tokenizer.pad_id, h_c_2_out)
                 h_c_1_out = torch.where(h_c_1_out == self.tokenizer.eos_id, self.tokenizer.pad_id, h_c_1_out)
-                f_c_out = torch.where(f_c_out == self.tokenizer.eos_id, self.tokenizer.pad_id, f_c_targets)
+                f_c_out = torch.where(f_c_out == self.tokenizer.eos_id, self.tokenizer.pad_id, f_c_out)
                 d_c_out = torch.where(d_c_out == self.tokenizer.eos_id, self.tokenizer.pad_id, d_c_out)
                 n = (f_c_out != self.tokenizer.pad_id).sum().item()
         loss /= loss_numel
