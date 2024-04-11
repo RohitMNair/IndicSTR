@@ -1,6 +1,6 @@
 from torchmetrics import Metric
 from torch import nn
-from typing import Tuple
+from typing import Tuple, Sequence
 from torch import Tensor
 from nltk import edit_distance
 import torch
@@ -165,7 +165,7 @@ class CombinedHalfCharAccuracy(Metric):
         self.thresh = threshold
         self.softmax = nn.Softmax(dim = 1)
 
-    def update(self, half_char_logits:Tuple[Tensor, Tensor], half_char_target:Tuple[Tensor, Tensor]):
+    def update(self, half_char_logits:Sequence[Tensor], half_char_target:Sequence[Tensor]):
         """
         Update the metric
         Args:
@@ -174,45 +174,34 @@ class CombinedHalfCharAccuracy(Metric):
         """
         # Dim logits: Batch x # of classes
         # Dim target: Batch
-        h_c_2_logits, h_c_1_logits = half_char_logits
-        h_c_2_target, h_c_1_target = half_char_target
-
-        assert h_c_2_target.shape == h_c_1_target.shape, \
-            "Half character 1 and Half character 2 target shapes do not match"
-
         # get the probabilities
-        h_c_2_probs = self.softmax(h_c_2_logits)
-        h_c_1_probs = self.softmax(h_c_1_logits)
+        num_h_c = len(half_char_logits)
+        h_c_probs = [self.softmax(h_c_logit) for h_c_logit in half_char_logits]
 
         # get the max. probab. and the index for each pred. in batch
-        h_c_2_max_probs, h_c_2_pred = torch.max(h_c_2_probs, dim = 1)
-        h_c_1_max_probs, h_c_1_pred = torch.max(h_c_1_probs, dim = 1)
+        h_c_max= [torch.max(h_c, dim = 1) for h_c in h_c_probs]
 
         # get a binary mask for each item in batch
         # where the max probs are above threshold
-        h_c_2_bin_mask = h_c_2_max_probs >= self.thresh
-        h_c_1_bin_mask = h_c_1_max_probs >= self.thresh
-        combined_bin_mask = torch.all(torch.stack([h_c_2_bin_mask, h_c_1_bin_mask], dim= 0), dim= 0)
+        h_c_bin_mask = [h_c[0] >= self.thresh for h_c in h_c_max]
+        combined_bin_mask = torch.all(torch.stack(h_c_bin_mask, dim= 0), dim= 0)
         
         # only considere those predictions where bin mask is true
-        h_c_2_pred_filtered = h_c_2_pred[combined_bin_mask]
-        h_c_2_target_filtered = h_c_2_target[combined_bin_mask]
-        h_c_1_pred_filtered = h_c_1_pred[combined_bin_mask]
-        h_c_1_target_filtered = h_c_1_target[combined_bin_mask]
+        h_c_pred_filtered = [h_c[1][combined_bin_mask] for h_c in h_c_max]
+        h_c_target_filtered = [h_c[combined_bin_mask] for h_c in half_char_target]
 
         # Ensure shapes match
-        assert h_c_2_pred_filtered.shape == h_c_2_target_filtered.shape,\
-                "shapes of half character 2 filtered and predicted do not match"
-        assert h_c_1_pred_filtered.shape == h_c_1_target_filtered.shape, \
-                "shapes of half character 1 filtered and predicted do not match"
+        # assert h_c_2_pred_filtered.shape == h_c_2_target_filtered.shape,\
+        #         "shapes of half character 2 filtered and predicted do not match"
+        # assert h_c_1_pred_filtered.shape == h_c_1_target_filtered.shape, \
+        #         "shapes of half character 1 filtered and predicted do not match"
 
         # compute correct predictions
-        h_c_2_correct = h_c_2_pred_filtered == h_c_2_target_filtered
-        h_c_1_correct = h_c_1_pred_filtered == h_c_1_target_filtered
-        combined_correct = torch.stack([h_c_2_correct, h_c_1_correct], dim= 0)
+        h_c_correct = [h_c_pred_filtered[i] == h_c_target_filtered[i] for i in range(num_h_c)]
+        combined_correct = torch.stack(h_c_correct, dim= 0)
 
         self.correct += torch.all(combined_correct, dim= 0).sum()
-        self.total += h_c_2_target.numel() # batch size * max grps
+        self.total += half_char_target[0].numel() # batch size * max grps
     
     def compute(self):
         return self.correct.float() / self.total

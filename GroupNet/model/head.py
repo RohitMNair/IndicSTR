@@ -1,5 +1,5 @@
 from torch import Tensor
-from typing import Tuple
+from typing import Tuple, Sequence
 import lightning.pytorch as pl
 import torch.nn as nn
 import torch
@@ -181,3 +181,49 @@ class MalayalamClassifier(pl.LightningModule):
         char_logits = self.character_head(x)
         diac_logits = self.diacritic_head(x)
         return half_char3_logits, half_char2_logits, half_char1_logits, char_logits, diac_logits
+
+class Classifier(pl.LightningModule):
+    """
+    A multi-head-multi-label classifier to classify characters within a group
+    """
+    def __init__(self, hidden_size:int, num_half_character_classes:int,
+                 num_full_character_classes:int, num_diacritic_classes:int, num_h_c:int= 2):
+        """
+        Constructor for GrpClassifier
+        Args:
+        - hidden_size (int): the size of the input feature vectors
+        - num_half_character_classes (int): Number of half characters
+        - num_full_character_classes (int): Number of full characters
+        - num_diacritic_classes (int): Number of diacritic classes
+        - num_h_c (int): Number of half-character permitted
+        """
+        super().__init__()
+        self.hidden_size= hidden_size
+        self.num_h_c_classes = num_half_character_classes
+        self.num_f_c_classes = num_full_character_classes
+        self.num_d_classes = num_diacritic_classes
+        self.num_h_c = num_h_c
+        self.half_character_heads = nn.ModuleList([nn.Linear(
+                                                    in_features = self.hidden_size,
+                                                    out_features = self.num_h_c_classes, # extra node for no half-char
+                                                    bias = True
+                                                    ) for _ in self.num_h_c])
+        
+        self.character_head = nn.Linear(
+                                in_features = self.hidden_size,
+                                out_features = self.num_f_c_classes,
+                                bias = True
+                            )
+        self.diacritic_head = nn.Linear( # multi-label classification hence no need for extra head
+                                in_features = self.hidden_size,
+                                out_features = self.num_d_classes,
+                                bias = True
+                            )
+        
+    def forward(self, x:Tensor)-> Tuple[Sequence[Tensor], Tensor, Tensor] :
+        half_char_logits = []
+        for head in self.half_character_heads:
+            half_char_logits.append(head(x))
+        char_logits = self.character_head(x)
+        diac_logits = self.diacritic_head(x)
+        return half_char_logits, char_logits, diac_logits

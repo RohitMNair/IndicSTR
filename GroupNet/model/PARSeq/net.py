@@ -6,7 +6,7 @@ from itertools import permutations
 from .decoder import Decoder, TokenEmbedding
 from model.head import HindiGrpClassifier
 from data.tokenizer import HindiPARSeqTokenizer
-from ViTSTR.encoder import ViTEncoder
+from model.ViTSTR.encoder import ViTEncoder
 import torch.nn as nn
 import torch
 import numpy as np
@@ -161,7 +161,7 @@ class HindiPARSeq(HindiBaseSystem):
                 h_c_ctx.append(t_)
 
             f_c_ctx = torch.full((bs, num_steps), self.tokenizer.pad_id, dtype=torch.long, device=self.device)
-            f_c_ctx[:, 0] = self.tokenizer.bos_id # change with BOS later
+            f_c_ctx[:, 0] = self.tokenizer.bos_id
             d_c_ctx = []
             for _ in range(self.num_d_c):
                 t_ = torch.full((bs, num_steps), self.tokenizer.pad_id, dtype=torch.long, device=self.device)
@@ -181,7 +181,7 @@ class HindiPARSeq(HindiBaseSystem):
                 # the next token probability is in the output's ith token position
                 h_c_2_logit, h_c_1_logit, f_c_logit, d_c_logit = self.classifier(tgt_out)
                 logits.append([h_c_2_logit, h_c_1_logit, f_c_logit, d_c_logit])
-                if j < self.max_grps:
+                if j < num_steps:
                     # greedy decode. add the next token index to the target input
                     h_c_ctx[0][:, j] = h_c_2_logit.squeeze().argmax(-1)
                     h_c_ctx[1][:, j] = h_c_1_logit.squeeze().argmax(-1)
@@ -372,8 +372,8 @@ class HindiPARSeq(HindiBaseSystem):
                 n = (f_c_out != self.tokenizer.pad_id).sum().item()
         loss /= loss_numel
 
-        self.log('loss_step', loss, prog_bar= True, on_step= True, on_epoch= False, logger = True, sync_dist = True, batch_size= batch_size)
-        self.log('loss_epoch', loss, prog_bar= False, on_step= False, on_epoch= True, logger = True, sync_dist = True, batch_size= batch_size)
+        self.log('train_loss_step', loss, prog_bar= True, on_step= True, on_epoch= False, logger = True, sync_dist = True, batch_size= batch_size)
+        self.log('train_loss_epoch', loss, prog_bar= False, on_step= False, on_epoch= True, logger = True, sync_dist = True, batch_size= batch_size)
         return loss
 
     def validation_step(self, batch, batch_no)-> None:
@@ -472,8 +472,8 @@ class HindiPARSeq(HindiBaseSystem):
         # Grp level metrics
         self.test_h_c_2_acc(flat_h_c_2_logits, flat_h_c_2_targets)
         self.test_h_c_1_acc(flat_h_c_1_logits, flat_h_c_1_targets)
-        self.test_comb_h_c_acc((flat_h_c_2_logits, flat_h_c_1_logits),\
-                                (flat_h_c_2_targets, flat_h_c_1_targets))
+        # self.test_comb_h_c_acc((flat_h_c_2_logits, flat_h_c_1_logits),\
+                                # (flat_h_c_2_targets, flat_h_c_1_targets))
         self.test_f_c_acc(flat_f_c_logits, flat_f_c_targets)
         self.test_d_acc(flat_d_c_logits, flat_d_targets)
         self.test_grp_acc((flat_h_c_2_logits, flat_h_c_1_logits, flat_f_c_logits, flat_d_c_logits),\
@@ -492,7 +492,7 @@ class HindiPARSeq(HindiBaseSystem):
             "test_loss": loss,
             "test_half_character2_acc": self.test_h_c_2_acc,
             "test_half_character1_acc": self.test_h_c_1_acc,
-            "test_combined_half_character_acc": self.test_comb_h_c_acc,
+            # "test_combined_half_character_acc": self.test_comb_h_c_acc,
             "test_character_acc": self.test_f_c_acc,
             "test_diacritic_acc": self.test_d_acc,
             "test_wrr": self.test_wrr, 
@@ -501,7 +501,6 @@ class HindiPARSeq(HindiBaseSystem):
             "NED": self.ned,
         }
         self.log_dict(log_dict_epoch, on_step = False, on_epoch = True, prog_bar = False, logger = True, sync_dist = True, batch_size= batch_size)
-
 
 class ViTHindiPARSeq(HindiPARSeq):
     def __init__(self, hidden_size: int = 768, num_hidden_layers: int = 12, num_attention_heads: int = 12,
@@ -516,13 +515,16 @@ class ViTHindiPARSeq(HindiPARSeq):
                  ) -> None:
         super().__init__(mlp_ratio= mlp_ratio, initializer_range= initializer_range, 
                  layer_norm_eps= layer_norm_eps, image_size= image_size, patch_size = patch_size, 
-                 num_channels = 3, dec_num_sa_heads = dec_num_sa_heads, dec_num_ca_heads= dec_num_ca_heads,
+                 num_channels = num_channels, dec_num_sa_heads = dec_num_sa_heads, dec_num_ca_heads= dec_num_ca_heads,
                  dec_mlp_ratio= dec_mlp_ratio, dec_depth= dec_depth, perm_num= perm_num, 
                  perm_forward= perm_forward, perm_mirrored= perm_mirrored, decode_ar= decode_ar,
                  refine_iters= refine_iters, dropout= dropout, threshold= threshold, max_grps = max_grps,
                  learning_rate= learning_rate, weight_decay= weight_decay, warmup_pct= warmup_pct)
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
+        self.hidden_dropout_prob = hidden_dropout_prob
+        self.attention_probs_dropout_prob = attention_probs_dropout_prob
+        self.num_attention_heads = num_attention_heads
         self.encoder = ViTEncoder(
             hidden_size= self.hidden_size,
             num_hidden_layers= self.num_hidden_layers,

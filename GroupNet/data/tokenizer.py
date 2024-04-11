@@ -1345,13 +1345,17 @@ class HindiPARSeqTokenizer(HindiTokenizer):
         h_c_2_target[0] = h_c_1_target[0] = f_c_target[0] = self.bos_id
         # truncate grps if grps exceed max_grps
         if len(grps) <= self.max_grps:
-            eos_idx = len(grps)
+            eos_idx = len(grps) + 1
             # assign eos after the last group
             h_c_2_target[eos_idx], h_c_1_target[eos_idx], f_c_target[eos_idx] = self.eos_id, self.eos_id, self.eos_id
             d_target[eos_idx, self.eos_id] = 1.
+            d_target[eos_idx, self.pad_id] = 0.
                                                                                         
         else:
+            eos_idx = self.max_grps + 1
             grps = grps[:self.max_grps]
+            h_c_2_target[eos_idx], h_c_1_target[eos_idx], f_c_target[eos_idx] = self.eos_id, self.eos_id, self.eos_id
+            d_target[eos_idx, self.eos_id] = 1.
        
         for idx,grp in enumerate(grps, start= 1):
             h_c_2_target[idx], h_c_1_target[idx], f_c_target[idx], d_target[idx] = self.grp_class_encoder(grp=grp)
