@@ -1356,6 +1356,7 @@ class HindiPARSeqTokenizer(HindiTokenizer):
             grps = grps[:self.max_grps]
             h_c_2_target[eos_idx], h_c_1_target[eos_idx], f_c_target[eos_idx] = self.eos_id, self.eos_id, self.eos_id
             d_target[eos_idx, self.eos_id] = 1.
+            d_target[eos_idx, self.pad_id] = 0.
        
         for idx,grp in enumerate(grps, start= 1):
             h_c_2_target[idx], h_c_1_target[idx], f_c_target[idx], d_target[idx] = self.grp_class_encoder(grp=grp)

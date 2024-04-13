@@ -528,27 +528,23 @@ class PARSeqBaseSystem(GrpNetBaseSystem):
             + self.f_c_loss(input= flat_f_c_logits, target= flat_f_c_targets) \
             + self.d_loss(input= flat_d_c_logits, target= flat_d_c_targets))
         # Grp level metrics
-        self.val_h_c_1_acc(flat_h_c_1_logits, flat_h_c_1_targets)
-        self.val_comb_h_c_acc((flat_h_c_2_logits, flat_h_c_1_logits),\
-                               (flat_h_c_2_targets, flat_h_c_1_targets))
+        self.val_comb_h_c_acc(flat_h_c_logits, flat_h_c_targets)
         self.val_f_c_acc(flat_f_c_logits, flat_f_c_targets)
         self.val_d_acc(flat_d_c_logits, flat_d_c_targets)
-        self.val_grp_acc((flat_h_c_2_logits, flat_h_c_1_logits, flat_f_c_logits, flat_d_c_logits),\
-                           (flat_h_c_2_targets, flat_h_c_1_targets, flat_f_c_targets, flat_d_targets))
+        self.val_grp_acc((flat_h_c_logits, flat_f_c_logits, flat_d_c_logits),\
+                           (flat_h_c_targets, flat_f_c_targets, flat_d_c_targets))
         # Word level metric
-        self.val_wrr2((h_c_2_logits, h_c_1_logits, f_c_logits, d_c_logits),\
-                     (h_c_2_out, h_c_1_out, f_c_out, d_c_out), self.tokenizer.pad_id)
+        self.val_wrr2((h_c_logits, f_c_logits, d_c_logits),\
+                     (h_c_out, f_c_out, d_c_out), self.tokenizer.pad_id)
         # self.val_wrr(pred_strs= self.tokenizer.decode((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits)), target_strs= labels)
         
         if batch_no % 100000 == 0:
-            pred_labels = self.tokenizer.decode((h_c_2_logits, h_c_1_logits, f_c_logits, d_c_logits))            
+            pred_labels = self.tokenizer.decode((*h_c_logits, f_c_logits, d_c_logits))            
             self._log_tb_images(imgs[:5], pred_labels= pred_labels[:5], gt_labels= labels[:5], mode= "val")
 
         # On epoch only logs
         log_dict_epoch = {
             "val_loss": loss,
-            "val_half_character2_acc": self.val_h_c_2_acc,
-            "val_half_character1_acc": self.val_h_c_1_acc,
             "val_combined_half_character_acc": self.val_comb_h_c_acc,
             "val_character_acc": self.val_f_c_acc,
             "val_diacritic_acc": self.val_d_acc,
@@ -561,47 +557,48 @@ class PARSeqBaseSystem(GrpNetBaseSystem):
         # batch: img (BS x C x H x W), label (BS)
         imgs, labels = batch
         batch_size = len(labels)
-        h_c_2_targets, h_c_1_targets, f_c_targets, d_c_targets = (
-                                  torch.zeros(batch_size, self.max_grps + 2, device= self.device, dtype= torch.long),
+        h_c_targets, f_c_targets, d_c_targets = ( # +2 for eos and bos
+                                  [torch.zeros(batch_size, self.max_grps + 2, device= self.device, dtype= torch.long) for _ in self.num_h_c],
                                   torch.zeros(batch_size, self.max_grps + 2, device= self.device, dtype= torch.long),
                                   torch.zeros(batch_size, self.max_grps + 2, device= self.device, dtype= torch.long),
                                   torch.zeros(batch_size, self.max_grps + 2, self.num_d_classes, device= self.device),
                                 )
-        n_grps = [self.max_grps for i in range(batch_size)]
-        for idx,label in enumerate(labels, start= 0):
-            h_c_2_targets[idx], h_c_1_targets[idx], f_c_targets[idx], d_c_targets[idx], n_grps[idx] = self.tokenizer.label_encoder(label, device= self.device)
         
-        (h_c_2_out, h_c_1_out, f_c_out, d_c_out) = (h_c_2_targets[:, 1:], h_c_1_targets[:, 1:], 
-                                                                    f_c_targets[:, 1:], d_c_targets[:, 1:])
-        (h_c_2_logits, h_c_1_logits, f_c_logits, d_c_logits) = self.forward(imgs)
+        n_grps = [self.max_grps + 2 for _ in range(batch_size)]
+        for idx,label in enumerate(labels, start= 0):
+            label_encoding = self.tokenizer.label_encoder(label, device= self.device)
+            h_c_targets[idx] = label_encoding[:self.num_h_c]
+            f_c_targets[idx], d_c_targets[idx], n_grps[idx] = label_encoding[self.num_h_c:]
+        
+        # ignore BOS
+        (h_c_out, f_c_out, d_c_out) = ([h_c[:, 1:] for h_c in h_c_targets],
+                                                    f_c_targets[:, 1:], d_c_targets[:, 1:])
+
+        (h_c_logits, f_c_logits, d_c_logits) = self.forward(imgs)
 
         # Get the flattened versions of the targets and the logits for grp level metrics
-        ((flat_h_c_2_targets, flat_h_c_1_targets, flat_f_c_targets, flat_d_targets), 
-        (flat_h_c_2_logits, flat_h_c_1_logits, flat_f_c_logits, flat_d_c_logits)) = self._get_flattened_non_pad(
-                                                                                targets= (h_c_2_out, h_c_1_out, f_c_out, d_c_out),
-                                                                                logits= (h_c_2_logits, h_c_1_logits, f_c_logits, d_c_logits),
+        ((flat_h_c_targets, flat_f_c_targets, flat_d_c_targets), 
+        (flat_h_c_logits, flat_f_c_logits, flat_d_c_logits)) = self._get_flattened_non_pad(
+                                                                                targets= (h_c_out, f_c_out, d_c_out),
+                                                                                logits= (h_c_logits, f_c_logits, d_c_logits),
                                                                             )
 
-        # compute the loss for each group
-        loss = self.h_c_2_loss(input= flat_h_c_2_logits, target= flat_h_c_2_targets) \
-            + self.h_c_1_loss(input= flat_h_c_1_logits, target= flat_h_c_1_targets) \
+        # compute the loss for each character category
+        loss += sum([self.h_c_loss[i](input= flat_h_c_logits[i], target= flat_h_c_targets[i]) for i in range(self.num_h_c)] \
             + self.f_c_loss(input= flat_f_c_logits, target= flat_f_c_targets) \
-            + self.d_loss(input= flat_d_c_logits, target= flat_d_targets)
+            + self.d_loss(input= flat_d_c_logits, target= flat_d_c_targets))
         
         # Grp level metrics
-        self.test_h_c_2_acc(flat_h_c_2_logits, flat_h_c_2_targets)
-        self.test_h_c_1_acc(flat_h_c_1_logits, flat_h_c_1_targets)
-        self.test_comb_h_c_acc((flat_h_c_2_logits, flat_h_c_1_logits),\
-                                (flat_h_c_2_targets, flat_h_c_1_targets))
+        self.test_comb_h_c_acc(flat_h_c_logits, flat_h_c_targets)
         self.test_f_c_acc(flat_f_c_logits, flat_f_c_targets)
-        self.test_d_acc(flat_d_c_logits, flat_d_targets)
-        self.test_grp_acc((flat_h_c_2_logits, flat_h_c_1_logits, flat_f_c_logits, flat_d_c_logits),\
-                           (flat_h_c_2_targets, flat_h_c_1_targets, flat_f_c_targets, flat_d_targets))
+        self.test_d_acc(flat_d_c_logits, flat_d_c_targets)
+        self.test_grp_acc((*flat_h_c_logits, flat_f_c_logits, flat_d_c_logits),\
+                           (*flat_h_c_targets, flat_f_c_targets, flat_d_c_targets))
         
         # Word level metric
-        self.test_wrr2((h_c_2_logits, h_c_1_logits, f_c_logits, d_c_logits),\
-                      (h_c_2_out, h_c_1_out, f_c_out, d_c_out), self.tokenizer.pad_id)
-        pred_labels= self.tokenizer.decode((h_c_2_logits, h_c_1_logits, f_c_logits, d_c_logits))
+        self.test_wrr2((h_c_logits, f_c_logits, d_c_logits),\
+                      (h_c_out, f_c_out, d_c_out), self.tokenizer.pad_id)
+        pred_labels= self.tokenizer.decode((*h_c_logits, f_c_logits, d_c_logits))
         self.test_wrr(pred_strs= pred_labels, target_strs= labels)        
         self.ned(pred_labels= pred_labels, target_labels= labels)
         self._log_tb_images(imgs, pred_labels= pred_labels, gt_labels= labels, mode= "test")
@@ -609,8 +606,6 @@ class PARSeqBaseSystem(GrpNetBaseSystem):
         # On epoch only logs
         log_dict_epoch = {
             "test_loss": loss,
-            "test_half_character2_acc": self.test_h_c_2_acc,
-            "test_half_character1_acc": self.test_h_c_1_acc,
             "test_combined_half_character_acc": self.test_comb_h_c_acc,
             "test_character_acc": self.test_f_c_acc,
             "test_diacritic_acc": self.test_d_acc,
@@ -819,11 +814,11 @@ class DevanagariBaseSystem(pl.LightningModule):
                                  (flat_h_c_2_targets, flat_h_c_1_targets))
         self.train_f_c_acc(flat_f_c_logits, flat_f_c_targets)
         self.train_d_acc(flat_d_logits, flat_d_targets)
-        self.train_grp_acc((flat_h_c_2_logits, flat_h_c_1_logits, flat_f_c_logits, flat_d_logits),\
-                           (flat_h_c_2_targets, flat_h_c_1_targets, flat_f_c_targets, flat_d_targets))
+        self.train_grp_acc(([flat_h_c_2_logits, flat_h_c_1_logits], flat_f_c_logits, flat_d_logits),\
+                           ([flat_h_c_2_targets, flat_h_c_1_targets], flat_f_c_targets, flat_d_targets))
         # Word level metric
-        self.train_wrr2((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits),\
-                       (h_c_2_targets, h_c_1_targets, f_c_targets, d_targets), self.tokenizer.pad_id)
+        self.train_wrr2(([h_c_2_logits, h_c_1_logits], f_c_logits, d_logits),\
+                       ([h_c_2_targets, h_c_1_targets], f_c_targets, d_targets), self.tokenizer.pad_id)
         # self.train_wrr(pred_strs= self.tokenizer.decode((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits)), target_strs= labels)
 
         if batch_no % 1000000 == 0:
@@ -888,11 +883,11 @@ class DevanagariBaseSystem(pl.LightningModule):
                                (flat_h_c_2_targets, flat_h_c_1_targets))
         self.val_f_c_acc(flat_f_c_logits, flat_f_c_targets)
         self.val_d_acc(flat_d_logits, flat_d_targets)
-        self.val_grp_acc((flat_h_c_2_logits, flat_h_c_1_logits, flat_f_c_logits, flat_d_logits),\
+        self.val_grp_acc(([flat_h_c_2_logits, flat_h_c_1_logits], flat_f_c_logits, flat_d_logits),\
                            (flat_h_c_2_targets, flat_h_c_1_targets, flat_f_c_targets, flat_d_targets))
         # Word level metric
-        self.val_wrr2((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits),\
-                     (h_c_2_targets, h_c_1_targets, f_c_targets, d_targets), self.tokenizer.pad_id)
+        self.val_wrr2(([h_c_2_logits, h_c_1_logits], f_c_logits, d_logits),\
+                     ([h_c_2_targets, h_c_1_targets], f_c_targets, d_targets), self.tokenizer.pad_id)
         # self.val_wrr(pred_strs= self.tokenizer.decode((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits)), target_strs= labels)
         
         if batch_no % 100000 == 0:
@@ -948,8 +943,8 @@ class DevanagariBaseSystem(pl.LightningModule):
                                 (flat_h_c_2_targets, flat_h_c_1_targets))
         self.test_f_c_acc(flat_f_c_logits, flat_f_c_targets)
         self.test_d_acc(flat_d_logits, flat_d_targets)
-        self.test_grp_acc((flat_h_c_2_logits, flat_h_c_1_logits, flat_f_c_logits, flat_d_logits),\
-                           (flat_h_c_2_targets, flat_h_c_1_targets, flat_f_c_targets, flat_d_targets))
+        self.test_grp_acc(([flat_h_c_2_logits, flat_h_c_1_logits], flat_f_c_logits, flat_d_logits),\
+                           ([flat_h_c_2_targets, flat_h_c_1_targets], flat_f_c_targets, flat_d_targets))
         
         # Word level metric
         self.test_wrr2((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits),\
@@ -1124,7 +1119,7 @@ class HindiBaseSystem(pl.LightningModule):
         d_pad[self.tokenizer.pad_id] = 1.
         flat_d_non_pad = ~ torch.all(flat_d_targets == d_pad, dim= 1)
         assert torch.all((flat_h_c_2_non_pad == flat_h_c_1_non_pad) == (flat_f_c_non_pad == flat_d_non_pad)).item(), \
-                f"Pads are not aligned properly {(flat_f_c_non_pad == flat_d_non_pad)} {flat_d_non_pad} {flat_f_c_non_pad}"
+                f"Pads are not aligned properly {(flat_f_c_non_pad == flat_d_non_pad)} {(flat_h_c_2_non_pad == flat_h_c_1_non_pad)}"
 
         flat_h_c_2_targets = flat_h_c_2_targets[flat_h_c_2_non_pad]
         flat_h_c_1_targets = flat_h_c_1_targets[flat_h_c_2_non_pad]
@@ -1177,11 +1172,11 @@ class HindiBaseSystem(pl.LightningModule):
                                  (flat_h_c_2_targets, flat_h_c_1_targets))
         self.train_f_c_acc(flat_f_c_logits, flat_f_c_targets)
         self.train_d_acc(flat_d_logits, flat_d_targets)
-        self.train_grp_acc((flat_h_c_2_logits, flat_h_c_1_logits, flat_f_c_logits, flat_d_logits),\
-                           (flat_h_c_2_targets, flat_h_c_1_targets, flat_f_c_targets, flat_d_targets))
+        self.train_grp_acc(([flat_h_c_2_logits, flat_h_c_1_logits], flat_f_c_logits, flat_d_logits),\
+                           ([flat_h_c_2_targets, flat_h_c_1_targets], flat_f_c_targets, flat_d_targets))
         # Word level metric
-        self.train_wrr2((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits),\
-                       (h_c_2_targets, h_c_1_targets, f_c_targets, d_targets), self.tokenizer.pad_id)
+        self.train_wrr2(([h_c_2_logits, h_c_1_logits], f_c_logits, d_logits),\
+                       ([h_c_2_targets, h_c_1_targets], f_c_targets, d_targets), self.tokenizer.pad_id)
         # self.train_wrr(pred_strs= self.tokenizer.decode((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits)), target_strs= labels)
 
         if batch_no % 1000000 == 0:
@@ -1245,11 +1240,11 @@ class HindiBaseSystem(pl.LightningModule):
                                (flat_h_c_2_targets, flat_h_c_1_targets))
         self.val_f_c_acc(flat_f_c_logits, flat_f_c_targets)
         self.val_d_acc(flat_d_logits, flat_d_targets)
-        self.val_grp_acc((flat_h_c_2_logits, flat_h_c_1_logits, flat_f_c_logits, flat_d_logits),\
-                           (flat_h_c_2_targets, flat_h_c_1_targets, flat_f_c_targets, flat_d_targets))
+        self.val_grp_acc(([flat_h_c_2_logits, flat_h_c_1_logits], flat_f_c_logits, flat_d_logits),\
+                           ([flat_h_c_2_targets, flat_h_c_1_targets], flat_f_c_targets, flat_d_targets))
         # Word level metric
-        self.val_wrr2((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits),\
-                     (h_c_2_targets, h_c_1_targets, f_c_targets, d_targets), self.tokenizer.pad_id)
+        self.val_wrr2(([h_c_2_logits, h_c_1_logits], f_c_logits, d_logits),\
+                     ([h_c_2_targets, h_c_1_targets], f_c_targets, d_targets), self.tokenizer.pad_id)
         # self.val_wrr(pred_strs= self.tokenizer.decode((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits)), target_strs= labels)
         
         if batch_no % 100000 == 0:
@@ -1304,12 +1299,12 @@ class HindiBaseSystem(pl.LightningModule):
                                 (flat_h_c_2_targets, flat_h_c_1_targets))
         self.test_f_c_acc(flat_f_c_logits, flat_f_c_targets)
         self.test_d_acc(flat_d_logits, flat_d_targets)
-        self.test_grp_acc((flat_h_c_2_logits, flat_h_c_1_logits, flat_f_c_logits, flat_d_logits),\
-                           (flat_h_c_2_targets, flat_h_c_1_targets, flat_f_c_targets, flat_d_targets))
+        self.test_grp_acc(([flat_h_c_2_logits, flat_h_c_1_logits], flat_f_c_logits, flat_d_logits),\
+                           ([flat_h_c_2_targets, flat_h_c_1_targets], flat_f_c_targets, flat_d_targets))
         
         # Word level metric
-        self.test_wrr2((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits),\
-                      (h_c_2_targets, h_c_1_targets, f_c_targets, d_targets), self.tokenizer.pad_id)
+        self.test_wrr2(([h_c_2_logits, h_c_1_logits], f_c_logits, d_logits),\
+                      ([h_c_2_targets, h_c_1_targets], f_c_targets, d_targets), self.tokenizer.pad_id)
         pred_labels= self.tokenizer.decode((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits))
         self.test_wrr(pred_strs= pred_labels, target_strs= labels)        
         self.ned(pred_labels= pred_labels, target_labels= labels)

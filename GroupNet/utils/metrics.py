@@ -19,8 +19,8 @@ class CharGrpAccuracy(Metric):
         self.sigmoid = nn.Sigmoid()
         self.thresh = threshold
 
-    def update(self, preds: Tuple[Tensor, Tensor, Tensor, Tensor], 
-            target: Tuple[Tensor, Tensor, Tensor, Tensor]):
+    def update(self, preds: Tuple[Sequence[Tensor], Tensor, Tensor], 
+            target: Tuple[Sequence[Tensor], Tensor, Tensor]):
         """
         Update the metric
         Args:
@@ -28,50 +28,44 @@ class CharGrpAccuracy(Metric):
             target (tuple | list): half character class number, character class number, 
                                     diacritics 1 or 2 Hot vector
         """
-        h_c_2_logits, h_c_1_logits, f_c_logits, d_logits = preds
-        h_c_2_target, h_c_1_target, f_c_target, d_target = target
-        
+        h_c_logits, f_c_logits, d_logits = preds
+        h_c_targets, f_c_targets, d_targets = target
+        num_h_c = len(h_c_logits)
         # calc probabs
-        h_c_2_probs = self.softmax(h_c_2_logits)
-        h_c_1_probs = self.softmax(h_c_1_logits)
+        h_c_probs = [self.softmax(h_c) for h_c in h_c_logits]
         f_c_probs = self.softmax(f_c_logits)
         d_probs = self.sigmoid(d_logits)
 
         # get the max probab and correspondig index
-        h_c_2_max_probs, h_c_2_preds= torch.max(h_c_2_probs, dim= 1)
-        h_c_1_max_probs, h_c_1_preds = torch.max(h_c_1_probs, dim= 1)
+        h_c_max = [torch.max(h_c, dim= 1) for h_c in h_c_probs]
         f_c_max_probs, f_c_preds = torch.max(f_c_probs, dim= 1)
 
         # bin mask for batch items having predictions greater than thresh
-        h_c_2_bin_mask = h_c_2_max_probs >= self.thresh
-        h_c_1_bin_mask = h_c_1_max_probs >= self.thresh
+        h_c_bin_mask = [h_c[0] >= self.thresh for h_c in h_c_max]
         f_c_bin_mask = f_c_max_probs >= self.thresh
 
         combined_mask = torch.all(
                             torch.stack(
-                                [h_c_2_bin_mask, h_c_1_bin_mask, f_c_bin_mask],
+                                [*h_c_bin_mask, f_c_bin_mask],
                                 dim= 0
                                 ),
                             dim= 0
                         )
 
         # consider only those data items where max probab > thresh
-        h_c_2_preds_filtered = h_c_2_preds[combined_mask]
-        h_c_1_preds_filtered = h_c_1_preds[combined_mask]
+        h_c_preds_filtered = [h_c[1][combined_mask] for h_c in h_c_max]
         f_c_preds_filtered = f_c_preds[combined_mask]
 
-        h_c_2_target_filtered = h_c_2_target[combined_mask]
-        h_c_1_target_filtered = h_c_1_target[combined_mask]
-        f_c_target_filtered = f_c_target[combined_mask]
+        h_c_target_filtered = [h_c[combined_mask] for h_c in h_c_targets]
+        f_c_target_filtered = f_c_targets[combined_mask]
 
-        h_c_2_correct = h_c_2_preds_filtered == h_c_2_target_filtered
-        h_c_1_correct = h_c_1_preds_filtered == h_c_1_target_filtered
+        h_c_correct = [h_c_preds_filtered[i] == h_c_target_filtered[i] for i in range(num_h_c)]
         f_c_correct = f_c_preds_filtered == f_c_target_filtered   
-        d_correct = torch.all((d_probs >= self.thresh) == (d_target >= 1.), dim = 1)
-        combined_correct = torch.stack([h_c_2_correct, h_c_1_correct, f_c_correct, d_correct[combined_mask]], dim= 0)
+        d_correct = torch.all((d_probs >= self.thresh) == (d_targets >= 1.), dim = 1)
+        combined_correct = torch.stack([*h_c_correct, f_c_correct, d_correct[combined_mask]], dim= 0)
 
         self.correct += torch.all(combined_correct, dim= 0).sum()
-        self.total += h_c_2_target.numel() # batch size * max grps
+        self.total += f_c_targets.numel() # batch size * max grps
 
     def compute(self):
         return self.correct.float() / self.total
@@ -353,18 +347,18 @@ class WRR2(Metric):
         self.sigmoid = nn.Sigmoid()
         self.softmax = nn.Softmax(dim= 2)
 
-    def update(self, logits:Tuple[Tensor, Tensor, Tensor, Tensor], 
-               targets:Tuple[Tensor, Tensor, Tensor, Tensor], pad_id:int):
+    def update(self, logits:Tuple[Sequence[Tensor], Tensor, Tensor], 
+               targets:Tuple[Sequence[Tensor], Tensor, Tensor], pad_id:int):
         # shape character logits: BS x Max Grps x # of classes
         # shape character target: BS x Max Grps
         # shape diacritic logits: BS x Max Grps x # of classes
         # shape diacritic target: BS x Max Grps x # of classes
-        h_c_2_logits, h_c_1_logits, f_c_logits, d_logits = logits
-        h_c_2_targets, h_c_1_targets, f_c_targets, d_targets = targets
-
+        h_c_logits, f_c_logits, d_logits = logits
+        h_c_targets, f_c_targets, d_targets = targets
+        num_h_c = len(h_c_logits)
         # check shapes
-        assert len(h_c_2_logits.shape) == len(h_c_1_logits.shape) == len(f_c_logits.shape) == 3 and \
-              len(h_c_2_targets.shape) == len(h_c_1_targets.shape) == len(f_c_targets.shape) == 2, \
+        assert all([h_c.shape == h_c_logits[0].shape for h_c in h_c_logits]) and len(h_c_logits[0].shape) == len(f_c_logits.shape) == 3 and \
+              all([h_c.shape == h_c_targets[0].shape for h_c in h_c_targets]) and len(h_c_targets[0].shape) == len(f_c_targets.shape) == 2, \
         "for half and full characters logits shape must be (Batch_Size, Max Groups, # of classes) and target shape \
         should be (Batch_size, Max Grps) containing the class number"
 
@@ -372,27 +366,24 @@ class WRR2(Metric):
         "For diacritics the logits and target must be of shape (Batch Size, Max Groups, # of classes)"
 
         # get probab values
-        h_c_2_probabs = self.softmax(h_c_2_logits)
-        h_c_1_probabs = self.softmax(h_c_1_logits)
+        h_c_probs = [self.softmax(h_c) for h_c in h_c_logits]
         f_c_probabs = self.softmax(f_c_logits)
         d_probabs = self.sigmoid(d_logits)
 
         # get the max probab and the corresponding index
-        h_c_2_preds = torch.argmax(h_c_2_probabs, dim= 2)
-        h_c_1_preds = torch.argmax(h_c_1_probabs, dim= 2)
+        h_c_preds = [torch.argmax(h_c, dim= 2) for h_c in h_c_probs]
         f_c_preds = torch.argmax(f_c_probabs, dim= 2)
 
-        batch_size = h_c_2_targets.shape[0]
+        batch_size = f_c_targets.shape[0]
         # iterate over each batch element and check all the groups which are not pad
         for i in range(batch_size):
             # get the non pad grps for the batch element
             non_pad_grps = (f_c_targets[i] != pad_id)
-            h_c_2_correct = h_c_2_preds[i,non_pad_grps] == h_c_2_targets[i,non_pad_grps]
-            h_c_1_correct = h_c_1_preds[i,non_pad_grps] == h_c_1_targets[i,non_pad_grps]
+            h_c_correct = [h_c_preds[j][i,non_pad_grps] == h_c_targets[j][i,non_pad_grps] for j in range(num_h_c)]
             f_c_correct = f_c_preds[i,non_pad_grps] == f_c_targets[i,non_pad_grps]
             d_correct = torch.all((d_probabs[i,non_pad_grps] >= 0.5) == (d_targets[i,non_pad_grps] >= 1.), dim= 1)
 
-            combined_correct = torch.all(torch.all(torch.stack((h_c_2_correct, h_c_1_correct, f_c_correct, d_correct), dim= 0), dim= 0), dim= 0)
+            combined_correct = torch.all(torch.all(torch.stack((*h_c_correct, f_c_correct, d_correct), dim= 0), dim= 0), dim= 0)
             self.correct += torch.tensor(1) if combined_correct else torch.tensor(0)
 
         self.total += torch.tensor(batch_size)

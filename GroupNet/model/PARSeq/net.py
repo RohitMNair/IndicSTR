@@ -414,11 +414,11 @@ class HindiPARSeq(HindiBaseSystem):
                                (flat_h_c_2_targets, flat_h_c_1_targets))
         self.val_f_c_acc(flat_f_c_logits, flat_f_c_targets)
         self.val_d_acc(flat_d_c_logits, flat_d_targets)
-        self.val_grp_acc((flat_h_c_2_logits, flat_h_c_1_logits, flat_f_c_logits, flat_d_c_logits),\
-                           (flat_h_c_2_targets, flat_h_c_1_targets, flat_f_c_targets, flat_d_targets))
+        self.val_grp_acc(([flat_h_c_2_logits, flat_h_c_1_logits], flat_f_c_logits, flat_d_c_logits),\
+                           ([flat_h_c_2_targets, flat_h_c_1_targets], flat_f_c_targets, flat_d_targets))
         # Word level metric
-        self.val_wrr2((h_c_2_logits, h_c_1_logits, f_c_logits, d_c_logits),\
-                     (h_c_2_out, h_c_1_out, f_c_out, d_c_out), self.tokenizer.pad_id)
+        self.val_wrr2(([h_c_2_logits, h_c_1_logits], f_c_logits, d_c_logits),\
+                     ([h_c_2_out, h_c_1_out], f_c_out, d_c_out), self.tokenizer.pad_id)
         # self.val_wrr(pred_strs= self.tokenizer.decode((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits)), target_strs= labels)
         
         if batch_no % 100000 == 0:
@@ -472,16 +472,16 @@ class HindiPARSeq(HindiBaseSystem):
         # Grp level metrics
         self.test_h_c_2_acc(flat_h_c_2_logits, flat_h_c_2_targets)
         self.test_h_c_1_acc(flat_h_c_1_logits, flat_h_c_1_targets)
-        # self.test_comb_h_c_acc((flat_h_c_2_logits, flat_h_c_1_logits),\
-                                # (flat_h_c_2_targets, flat_h_c_1_targets))
+        self.test_comb_h_c_acc((flat_h_c_2_logits, flat_h_c_1_logits),\
+                                (flat_h_c_2_targets, flat_h_c_1_targets))
         self.test_f_c_acc(flat_f_c_logits, flat_f_c_targets)
         self.test_d_acc(flat_d_c_logits, flat_d_targets)
-        self.test_grp_acc((flat_h_c_2_logits, flat_h_c_1_logits, flat_f_c_logits, flat_d_c_logits),\
-                           (flat_h_c_2_targets, flat_h_c_1_targets, flat_f_c_targets, flat_d_targets))
+        self.test_grp_acc(([flat_h_c_2_logits, flat_h_c_1_logits], flat_f_c_logits, flat_d_c_logits),\
+                           ([flat_h_c_2_targets, flat_h_c_1_targets], flat_f_c_targets, flat_d_targets))
         
         # Word level metric
-        self.test_wrr2((h_c_2_logits, h_c_1_logits, f_c_logits, d_c_logits),\
-                      (h_c_2_out, h_c_1_out, f_c_out, d_c_out), self.tokenizer.pad_id)
+        self.test_wrr2(([h_c_2_logits, h_c_1_logits], f_c_logits, d_c_logits),\
+                      ([h_c_2_out, h_c_1_out], f_c_out, d_c_out), self.tokenizer.pad_id)
         pred_labels= self.tokenizer.decode((h_c_2_logits, h_c_1_logits, f_c_logits, d_c_logits))
         self.test_wrr(pred_strs= pred_labels, target_strs= labels)        
         self.ned(pred_labels= pred_labels, target_labels= labels)
