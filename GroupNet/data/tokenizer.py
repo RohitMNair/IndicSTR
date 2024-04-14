@@ -213,7 +213,7 @@ class HindiTokenizer:
         h_c_2_target, h_c_1_target, f_c_target, d_target = (
                                                             self.blank_id,
                                                             self.blank_id,
-                                                            self.pad_id,
+                                                            -1,
                                                             torch.tensor(
                                                                 [0 for i in range(len(self.d_classes))],
                                                                   dtype= torch.long
@@ -235,7 +235,7 @@ class HindiTokenizer:
                         h_c_1_target = self.rev_h_c_label_map[char]
 
             elif char in self.rev_f_c_label_map:
-                assert f_c_target == self.pad_id,\
+                assert f_c_target == -1,\
                        f"2 full Characters have occured {grp}-{char}"
                 f_c_target = self.rev_f_c_label_map[char]
 
@@ -255,7 +255,7 @@ class HindiTokenizer:
             else:
                 raise Exception(f"Character {char} not found in vocabulary")
             
-        assert f_c_target != self.pad_id, f"There is no full character {grp}"
+        assert f_c_target != -1, f"There is no full character {grp}"
         assert torch.sum(d_target, dim = -1) <= 2, f"More than 2 diacritics occured {grp}-{d_target}"
 
         return h_c_2_target, h_c_1_target, f_c_target, d_target
@@ -1296,15 +1296,20 @@ class HindiPARSeqTokenizer(HindiTokenizer):
         self.chinh = ['ॐ', '₹', '।', '!', '$', ',', '.', '-', '%', '॥','ॽ']
         self.ank = ['०','१','२','३','४','५','६' ,'७' ,'८' ,'९']
         self.halanth = '्'
-        self.h_c_classes = [self.BOS, self.EOS, self.PAD, self.BLANK] \
-                            + self.vyanjan
-        self.f_c_classes = [self.BOS, self.EOS, self.PAD] \
-                            + self.vyanjan + self.svar + self.ank + self.chinh
-        self.d_classes =  [self.BOS, self.EOS, self.PAD] + self.matras # binary classification 
-        self.bos_id = 0      
-        self.eos_id = 1
-        self.pad_id = 2
-        self.blank_id = 3
+        self.h_c_classes = [self.EOS, self.BLANK] \
+                            + self.vyanjan +  [self.PAD, self.BOS]
+        self.f_c_classes = [self.EOS,] \
+                            + self.vyanjan + self.svar + self.ank + self.chinh \
+                            + [self.PAD, self.BOS]
+        self.d_classes =  [self.EOS] + self.matras + [self.PAD, self.BOS] # binary classification 
+        self.eos_id = 0
+        self.bos_id_h_c = len(self.h_c_classes) - 1
+        self.bos_id_f_c = len(self.f_c_classes) - 1
+        self.bos_id_d_c = len(self.d_classes) - 1
+        self.pad_id_h_c = len(self.h_c_classes) - 2
+        self.pad_id_f_c = len(self.f_c_classes) - 2
+        self.pad_id_d_c = len(self.d_classes) - 2
+        self.blank_id = 1
         self._normalize_charset()
         self.thresh = threshold
         self.max_grps = max_grps
@@ -1335,59 +1340,30 @@ class HindiPARSeqTokenizer(HindiTokenizer):
         """
         grps = self.label_transform(label= label) 
         h_c_2_target, h_c_1_target, f_c_target, d_target = ( # +2 for bos and eos
-                                                            torch.full((self.max_grps + 2,), self.pad_id, dtype= torch.long), 
-                                                            torch.full((self.max_grps + 2,), self.pad_id, dtype= torch.long),
-                                                            torch.full((self.max_grps + 2,), self.pad_id, dtype= torch.long),
+                                                            torch.full((self.max_grps + 2,), self.pad_id_h_c, dtype= torch.long), 
+                                                            torch.full((self.max_grps + 2,), self.pad_id_h_c, dtype= torch.long),
+                                                            torch.full((self.max_grps + 2,), self.pad_id_f_c, dtype= torch.long),
                                                             torch.zeros(self.max_grps + 2, len(self.d_classes), dtype= torch.long)
                                                         )
-        d_target[1:, self.pad_id] = 1.
-        d_target[0, self.bos_id] = 1.
-        h_c_2_target[0] = h_c_1_target[0] = f_c_target[0] = self.bos_id
+        d_target[1:, self.pad_id_d_c] = 1.
+        d_target[0, self.bos_id_d_c] = 1.
+        h_c_2_target[0] = h_c_1_target[0] = self.bos_id_h_c
+        f_c_target[0] = self.bos_id_f_c
         # truncate grps if grps exceed max_grps
         if len(grps) <= self.max_grps:
             eos_idx = len(grps) + 1
             # assign eos after the last group
             h_c_2_target[eos_idx], h_c_1_target[eos_idx], f_c_target[eos_idx] = self.eos_id, self.eos_id, self.eos_id
             d_target[eos_idx, self.eos_id] = 1.
-            d_target[eos_idx, self.pad_id] = 0.
+            d_target[eos_idx, self.pad_id_d_c] = 0.
                                                                                         
         else:
             eos_idx = self.max_grps + 1
             grps = grps[:self.max_grps]
             h_c_2_target[eos_idx], h_c_1_target[eos_idx], f_c_target[eos_idx] = self.eos_id, self.eos_id, self.eos_id
             d_target[eos_idx, self.eos_id] = 1.
-            d_target[eos_idx, self.pad_id] = 0.
+            d_target[eos_idx, self.pad_id_d_c] = 0.
        
         for idx,grp in enumerate(grps, start= 1):
             h_c_2_target[idx], h_c_1_target[idx], f_c_target[idx], d_target[idx] = self.grp_class_encoder(grp=grp)
-
         return h_c_2_target.to(device), h_c_1_target.to(device), f_c_target.to(device), d_target.to(device), len(grps) + 2
-    
-    def _decode_grp(self, h_c_2_pred:Tensor,h_c_1_pred:Tensor, f_c_pred:Tensor, 
-                    d_pred:Tensor, d_max:Tensor)-> str:
-        """
-        Method which takes in class predictions of a single group and decodes
-        the group
-        Args:
-        - h_c_2_pred (Tensor): Index of max logit (prediction) of half-char 2; shape torch.Size(1)
-        - h_c_1_pred (Tensor): Index of max logit (prediction) of half-char 1; shape torch.Size(1)
-        - f_c_pred (Tensor): Index of max logit (prediction) of full-char; shape torch.Size(1)
-        - d_pred (Tensor): Index of 2 probability values > threshold; shape torch.Size(2)
-        - d_max (Tensor): The corresponding values of d_pred in binary mask
-
-        Returns:
-        - str: the group formed
-        """
-        assert len(d_pred) == len(d_max) == 2, \
-            "Diacritic preds and max must contain 2 elements for 2 diacritics"
-        
-        grp = ""
-        grp += self.h_c_label_map[int(h_c_2_pred.item())] + self.halanth if self.h_c_label_map[int(h_c_2_pred.item())] != self.BLANK \
-            and self.h_c_label_map[int(h_c_2_pred.item())] != self.PAD else ""
-        grp += self.h_c_label_map[int(h_c_1_pred.item())] + self.halanth if self.h_c_label_map[int(h_c_1_pred.item())] != self.BLANK \
-            and self.h_c_label_map[int(h_c_1_pred.item())] != self.PAD else ""
-        grp += self.f_c_label_map[int(f_c_pred.item())]
-        grp += self.d_c_label_map[int(d_pred[0].item())] if d_max[0] else ""
-        grp += self.d_c_label_map[int(d_pred[1].item())] if d_max[1] else ""
-                
-        return grp.replace(self.BLANK, "").replace(self.PAD, "").replace(self.BOS, "").replace(self.EOS, "") # remove all [B], [S] & [P] occurences

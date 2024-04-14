@@ -100,12 +100,15 @@ class HindiPARSeq(HindiBaseSystem):
                             num_d_c= self.num_d_c,
                         )
         self.classifier = HindiGrpClassifier(
-            hidden_size= self.hidden_sizes[-1],
-            num_half_character_classes= self.num_h_c_classes,
-            num_full_character_classes= self.num_f_c_classes,
-            num_diacritic_classes= self.num_d_classes,
+            hidden_size= self.hidden_sizes[-1], 
+            num_half_character_classes= self.num_h_c_classes - 2, # we dont predict BOS or PAD
+            num_full_character_classes= self.num_f_c_classes - 2,
+            num_diacritic_classes= self.num_d_classes - 2,
         )
-
+        self.h_c_2_loss = nn.CrossEntropyLoss(reduction= 'mean', ignore_index= self.tokenizer.pad_id_h_c)
+        self.h_c_1_loss = nn.CrossEntropyLoss(reduction= 'mean', ignore_index= self.tokenizer.pad_id_h_c)
+        self.f_c_loss = nn.CrossEntropyLoss(reduction= 'mean', ignore_index= self.tokenizer.pad_id_f_c)
+        self.d_loss = nn.BCEWithLogitsLoss(reduction= 'mean')
         # +1 for <eos>
         self.pos_queries = nn.Parameter(torch.Tensor(1, max_grps + 1, self.hidden_sizes[-1])) # +1 for eos
         self.h_c_ctx_dropout = nn.ModuleList([nn.Dropout(dropout) for _ in range(self.num_h_c)])
@@ -114,6 +117,50 @@ class HindiPARSeq(HindiBaseSystem):
         self.pos_dropout = nn.Dropout(dropout)
         nn.init.trunc_normal_(self.pos_queries, std=.02)
 
+    def _get_flattened_non_pad(self, targets: Tuple[Tensor, Tensor, Tensor, Tensor],
+                                logits: Tuple[Tensor, Tensor, Tensor, Tensor]):
+        """
+        Function which returns a flattened version of the targets and logits, it flattens the group dimension
+        Args:
+        - targets (tuple(Tensor, Tensor, Tensor, Tensor)): A tuple consisting of half-char 2, half-char 1, full char, & diacritic targets
+        - logits (tuple(Tensor, Tensor, Tensor, Tensor)): A tuple consisting of half-char 2, half-char 1, full char, & diacritic logits
+
+        Returns:
+        - tuple(tuple(Tensor, Tensor, Tensor, Tensor), 
+            tuple(Tensor, Tensor, Tensor, Tensor)): (half-char 2, half-char 1, full char, & diacritic targets), 
+                                                    (half-char 2, half-char 1, full char, & diacritic logits)
+        """
+        h_c_2_targets, h_c_1_targets, f_c_targets, d_targets = targets
+        h_c_2_logits, h_c_1_logits, f_c_logits, d_logits = logits
+
+        flat_h_c_2_targets = h_c_2_targets.reshape(-1)
+        flat_h_c_1_targets = h_c_1_targets.reshape(-1)
+        flat_f_c_targets = f_c_targets.reshape(-1)
+        flat_d_targets = d_targets.reshape(-1, self.num_d_classes)
+        # print(f"The Flattened Targets {flat_h_c_2_targets}\n{flat_h_c_1_targets}\n{flat_f_c_targets}\n{flat_d_targets}\n\n")
+
+        flat_h_c_2_non_pad = (flat_h_c_2_targets != self.tokenizer.pad_id_h_c)
+        flat_h_c_1_non_pad = (flat_h_c_1_targets != self.tokenizer.pad_id_h_c)
+        flat_f_c_non_pad = (flat_f_c_targets != self.tokenizer.pad_id_f_c)
+        d_pad = torch.zeros(self.num_d_classes, dtype = torch.float32, device= self.device)
+        d_pad[self.tokenizer.pad_id_d_c] = 1.
+        flat_d_non_pad = ~ torch.all(flat_d_targets == d_pad, dim= 1)
+        assert torch.all((flat_h_c_2_non_pad == flat_h_c_1_non_pad) == (flat_f_c_non_pad == flat_d_non_pad)).item(), \
+                f"Pads are not aligned properly {(flat_f_c_non_pad == flat_d_non_pad)} {(flat_h_c_2_non_pad == flat_h_c_1_non_pad)}"
+
+        flat_h_c_2_targets = flat_h_c_2_targets[flat_h_c_2_non_pad]
+        flat_h_c_1_targets = flat_h_c_1_targets[flat_h_c_2_non_pad]
+        flat_f_c_targets = flat_f_c_targets[flat_h_c_2_non_pad]
+        flat_d_targets = flat_d_targets[flat_h_c_2_non_pad]
+
+        flat_h_c_2_logits = h_c_2_logits.reshape(-1, self.num_h_c_classes - 2)[flat_h_c_2_non_pad]
+        flat_h_c_1_logits = h_c_1_logits.reshape(-1, self.num_h_c_classes - 2)[flat_h_c_2_non_pad]
+        flat_f_c_logits = f_c_logits.reshape(-1, self.num_f_c_classes - 2)[flat_h_c_2_non_pad]
+        flat_d_logits = d_logits.reshape(-1, self.num_d_classes - 2)[flat_h_c_2_non_pad]
+
+        return ((flat_h_c_2_targets, flat_h_c_1_targets, flat_f_c_targets, flat_d_targets[:,:-2]), # dont send PAD and EOS for diacritic
+                (flat_h_c_2_logits, flat_h_c_1_logits, flat_f_c_logits, flat_d_logits))
+    
     def decode(self, h_c_ctx:Sequence[Tensor], f_c_ctx:Tensor, d_c_ctx:Sequence[Tensor], memory:Tensor,
                 context_key_padding_mask: Optional[Tensor] = None, query:Optional[Tensor] = None, query_mask: Optional[Tensor] = None):
         N, L = f_c_ctx.shape
@@ -156,16 +203,16 @@ class HindiPARSeq(HindiBaseSystem):
         if self.decode_ar:
             h_c_ctx = []
             for _ in range(self.num_h_c):
-                t_ = torch.full((bs, num_steps), self.tokenizer.pad_id, dtype=torch.long, device=self.device)
-                t_[:, 0] = self.tokenizer.bos_id
+                t_ = torch.full((bs, num_steps), self.tokenizer.pad_id_h_c, dtype=torch.long, device=self.device)
+                t_[:, 0] = self.tokenizer.bos_id_h_c
                 h_c_ctx.append(t_)
 
-            f_c_ctx = torch.full((bs, num_steps), self.tokenizer.pad_id, dtype=torch.long, device=self.device)
-            f_c_ctx[:, 0] = self.tokenizer.bos_id
+            f_c_ctx = torch.full((bs, num_steps), self.tokenizer.pad_id_f_c, dtype=torch.long, device=self.device)
+            f_c_ctx[:, 0] = self.tokenizer.bos_id_f_c
             d_c_ctx = []
             for _ in range(self.num_d_c):
-                t_ = torch.full((bs, num_steps), self.tokenizer.pad_id, dtype=torch.long, device=self.device)
-                t_[:, 0] = self.tokenizer.bos_id
+                t_ = torch.full((bs, num_steps), self.tokenizer.pad_id_d_c, dtype=torch.long, device=self.device)
+                t_[:, 0] = self.tokenizer.bos_id_d_c
                 d_c_ctx.append(t_)
 
             logits = []
@@ -202,9 +249,9 @@ class HindiPARSeq(HindiBaseSystem):
                     ]
         else:
             # No prior context, so input is just <bos>. We query all positions.
-            h_c_ctx = [torch.full((bs, 1), self.tokenizer.bos_id, dtype= torch.long, device=self.device) for _ in range(self.num_h_c)]
-            f_c_ctx = torch.full((bs, 1), self.tokenizer.bos_id, dtype= torch.long, device= self.device)
-            d_c_ctx = [torch.full((bs, 1), self.tokenizer.bos_id, dtype= torch.long, device=self.device) for _ in range(self.num_d_c)]
+            h_c_ctx = [torch.full((bs, 1), self.tokenizer.bos_id_h_c, dtype= torch.long, device=self.device) for _ in range(self.num_h_c)]
+            f_c_ctx = torch.full((bs, 1), self.tokenizer.bos_id_f_c, dtype= torch.long, device= self.device)
+            d_c_ctx = [torch.full((bs, 1), self.tokenizer.bos_id_d_c, dtype= torch.long, device=self.device) for _ in range(self.num_d_c)]
             tgt_out = self.decode(query=pos_queries, h_c_ctx= h_c_ctx, f_c_ctx= f_c_ctx, d_c_ctx= d_c_ctx, memory= memory)
             logits = self.classifier(tgt_out)
 
@@ -212,13 +259,15 @@ class HindiPARSeq(HindiBaseSystem):
             # For iterative refinement, we always use a 'cloze' mask.
             # We can derive it from the AR forward mask by unmasking the token context to the right.
             query_mask[torch.triu(torch.ones(num_steps, num_steps, dtype=torch.bool, device=self.device), 2)] = 0
-            bos = torch.full((bs, 1), self.tokenizer.bos_id, dtype=torch.long, device=self.device)
+            bos_h_c = torch.full((bs, 1), self.tokenizer.bos_id_h_c, dtype=torch.long, device=self.device)
+            bos_f_c = torch.full((bs, 1), self.tokenizer.bos_id_f_c, dtype=torch.long, device=self.device)
+            bos_d_c = torch.full((bs, 1), self.tokenizer.bos_id_d_c, dtype=torch.long, device=self.device)
             for i in range(self.refine_iters):
                 # Prior context is the previous output. remove the last grp as it is for eos
-                h_c_ctx = [torch.cat([bos, h_c_logits[:, :-1].argmax(-1)], dim= 1) for h_c_logits in logits[:self.num_h_c]]
-                f_c_ctx = torch.cat([bos, logits[2][:, :-1].argmax(-1)], dim= 1)
+                h_c_ctx = [torch.cat([bos_h_c, h_c_logits[:, :-1].argmax(-1)], dim= 1) for h_c_logits in logits[:self.num_h_c]]
+                f_c_ctx = torch.cat([bos_f_c, logits[2][:, :-1].argmax(-1)], dim= 1)
                 vals, indices = torch.topk(logits[-1][:, :-1], k=self.num_d_c)
-                d_c_ctx = [torch.cat([bos, indices[:,:,i]], dim= -1) for i in range(self.num_d_c)]
+                d_c_ctx = [torch.cat([bos_d_c, indices[:,:,i]], dim= -1) for i in range(self.num_d_c)]
 
                 # ctx_padding_mask = ((tgt_in == self.eos_id).int().cumsum(-1) > 0)  # mask tokens beyond the first EOS token.
                 h_c_ctx_pad = sum([(ctx == self.tokenizer.eos_id).int().cumsum(-1) for ctx in h_c_ctx])
@@ -314,7 +363,7 @@ class HindiPARSeq(HindiBaseSystem):
                                   torch.zeros(batch_size, self.max_grps + 2, device= self.device, dtype= torch.long),
                                   torch.zeros(batch_size, self.max_grps + 2, device= self.device, dtype= torch.long),
                                   torch.zeros(batch_size, self.max_grps + 2, device= self.device, dtype= torch.long),
-                                  torch.zeros(batch_size, self.max_grps + 2, self.num_d_classes, device= self.device),
+                                  torch.zeros(batch_size, self.max_grps + 2, self.num_d_classes, device= self.device), # we don't need PAD
                                 )
         
         n_grps = [self.max_grps + 2 for _ in range(batch_size)]
@@ -330,16 +379,16 @@ class HindiPARSeq(HindiBaseSystem):
         tgt_perms = self.gen_tgt_perms(f_c_targets[:,:num_grps])
         # ignore BOS tag
         (h_c_2_out, h_c_1_out, f_c_out, d_c_out) = (h_c_2_targets[:, 1:num_grps], h_c_1_targets[:, 1:num_grps], 
-                                                                    f_c_targets[:, 1:num_grps], d_c_targets[:, 1:num_grps])
+                                                                    f_c_targets[:, 1:num_grps], d_c_targets[:, 1:num_grps]) # we dont predict PAD or BOS
         (h_c_2_in, h_c_1_in, f_c_in, d_c_in) = (h_c_2_targets[:, :num_grps -1], h_c_1_targets[:, :num_grps -1], 
                                                                     f_c_targets[:, :num_grps -1], d_c_targets[:, :num_grps -1])
         # The [EOS] token is not depended upon by any other token in any permutation ordering
         # pads and eos are same accross char grps
-        ctx_padding_mask = (f_c_in == self.tokenizer.pad_id) | (f_c_in == self.tokenizer.eos_id) 
+        ctx_padding_mask = (f_c_in == self.tokenizer.pad_id_f_c) | (f_c_in == self.tokenizer.eos_id) 
 
         loss = 0
         loss_numel = 0
-        n = (f_c_targets != self.tokenizer.pad_id).sum().item()
+        n = (f_c_targets != self.tokenizer.pad_id_f_c).sum().item()
         for i, perm in enumerate(tgt_perms):
             tgt_mask, query_mask = self.generate_attn_masks(perm)
             vals, indices = torch.topk(d_c_in, k= self.num_d_c)
@@ -362,14 +411,14 @@ class HindiPARSeq(HindiBaseSystem):
             # After the second iteration (i.e. done with canonical and reverse orderings),
             # remove the [EOS] tokens for the succeeding perms
             if i == 1:
-                h_c_2_out = torch.where(h_c_2_out == self.tokenizer.eos_id, self.tokenizer.pad_id, h_c_2_out)
-                h_c_1_out = torch.where(h_c_1_out == self.tokenizer.eos_id, self.tokenizer.pad_id, h_c_1_out)
-                f_c_out = torch.where(f_c_out == self.tokenizer.eos_id, self.tokenizer.pad_id, f_c_out)
+                h_c_2_out = torch.where(h_c_2_out == self.tokenizer.eos_id, self.tokenizer.pad_id_h_c, h_c_2_out)
+                h_c_1_out = torch.where(h_c_1_out == self.tokenizer.eos_id, self.tokenizer.pad_id_h_c, h_c_1_out)
+                f_c_out = torch.where(f_c_out == self.tokenizer.eos_id, self.tokenizer.pad_id_f_c, f_c_out)
                 d_pad, d_eos = [torch.zeros(self.num_d_classes, device= self.device) for _ in range(2)]
-                d_pad[self.tokenizer.pad_id] = d_eos[self.tokenizer.eos_id] = 1.
+                d_pad[self.tokenizer.pad_id_d_c] = d_eos[self.tokenizer.eos_id] = 1.
                 d_c_eos = torch.all(d_c_out == d_eos, dim= -1)
                 d_c_out[d_c_eos] = d_pad
-                n = (f_c_out != self.tokenizer.pad_id).sum().item()
+                n = (f_c_out != self.tokenizer.pad_id_f_c).sum().item()
         loss /= loss_numel
 
         self.log('train_loss_step', loss, prog_bar= True, on_step= True, on_epoch= False, logger = True, sync_dist = True, batch_size= batch_size)
@@ -391,7 +440,7 @@ class HindiPARSeq(HindiBaseSystem):
             h_c_2_targets[idx], h_c_1_targets[idx], f_c_targets[idx], d_c_targets[idx], n_grps[idx] = self.tokenizer.label_encoder(label, device= self.device)
         # ignore BOS
         (h_c_2_out, h_c_1_out, f_c_out, d_c_out) = (h_c_2_targets[:, 1:], h_c_1_targets[:, 1:], 
-                                                                    f_c_targets[:, 1:], d_c_targets[:, 1:])
+                                                                    f_c_targets[:, 1:], d_c_targets[:, 1:]) # dont predict PAD or BOS
 
         (h_c_2_logits, h_c_1_logits, f_c_logits, d_c_logits) = self.forward(imgs)
 
@@ -418,7 +467,7 @@ class HindiPARSeq(HindiBaseSystem):
                            ([flat_h_c_2_targets, flat_h_c_1_targets], flat_f_c_targets, flat_d_targets))
         # Word level metric
         self.val_wrr2(([h_c_2_logits, h_c_1_logits], f_c_logits, d_c_logits),\
-                     ([h_c_2_out, h_c_1_out], f_c_out, d_c_out), self.tokenizer.pad_id)
+                     ([h_c_2_out, h_c_1_out], f_c_out, d_c_out[:,:,:-2]), self.tokenizer.pad_id_f_c)
         # self.val_wrr(pred_strs= self.tokenizer.decode((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits)), target_strs= labels)
         
         if batch_no % 100000 == 0:
@@ -453,7 +502,7 @@ class HindiPARSeq(HindiBaseSystem):
             h_c_2_targets[idx], h_c_1_targets[idx], f_c_targets[idx], d_c_targets[idx], n_grps[idx] = self.tokenizer.label_encoder(label, device= self.device)
         
         (h_c_2_out, h_c_1_out, f_c_out, d_c_out) = (h_c_2_targets[:, 1:], h_c_1_targets[:, 1:], 
-                                                                    f_c_targets[:, 1:], d_c_targets[:, 1:])
+                                                                    f_c_targets[:, 1:], d_c_targets[:, 1:]) # dont predict PAD or BOS
         (h_c_2_logits, h_c_1_logits, f_c_logits, d_c_logits) = self.forward(imgs)
 
         # Get the flattened versions of the targets and the logits for grp level metrics
@@ -481,7 +530,7 @@ class HindiPARSeq(HindiBaseSystem):
         
         # Word level metric
         self.test_wrr2(([h_c_2_logits, h_c_1_logits], f_c_logits, d_c_logits),\
-                      ([h_c_2_out, h_c_1_out], f_c_out, d_c_out), self.tokenizer.pad_id)
+                      ([h_c_2_out, h_c_1_out], f_c_out, d_c_out[:,:,:-2]), self.tokenizer.pad_id_f_c)
         pred_labels= self.tokenizer.decode((h_c_2_logits, h_c_1_logits, f_c_logits, d_c_logits))
         self.test_wrr(pred_strs= pred_labels, target_strs= labels)        
         self.ned(pred_labels= pred_labels, target_labels= labels)

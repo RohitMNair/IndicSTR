@@ -81,7 +81,6 @@ class LMDBDataset(Dataset):
         # get corresponding index for the label groups
         index = self.processed_indexes[index] 
         img = None
-        to_tensor = transforms.ToTensor()
         # keys assigned as per create_lmdb.py
         img_key = f'image-{index:09d}'.encode()
         
