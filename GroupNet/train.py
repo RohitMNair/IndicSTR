@@ -20,7 +20,7 @@ def main(cfg: DictConfig):
     Function to train character embeddings
     """
     composed = transforms.Compose([
-        rand_augment_transform(),
+        # rand_augment_transform(),
         transforms.ToTensor(),
         transforms.RandomRotation(
             degrees= cfg.transforms.rotation, 

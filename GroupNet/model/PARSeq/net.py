@@ -551,7 +551,7 @@ class HindiPARSeq(HindiBaseSystem):
         }
         self.log_dict(log_dict_epoch, on_step = False, on_epoch = True, prog_bar = False, logger = True, sync_dist = True, batch_size= batch_size)
 
-class ViTHindiPARSeq(HindiPARSeq):
+class HindiViTPARSeq(HindiPARSeq):
     def __init__(self, hidden_size: int = 768, num_hidden_layers: int = 12, num_attention_heads: int = 12,
                  mlp_ratio: float= 4.0, hidden_dropout_prob: float = 0.0,
                  attention_probs_dropout_prob: float = 0.0, initializer_range: float = 0.02,
@@ -589,5 +589,3 @@ class ViTHindiPARSeq(HindiPARSeq):
             num_channels= self.num_channels,
             qkv_bias= self.qkv_bias,
         )
-        pass
-    pass

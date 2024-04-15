@@ -53,8 +53,8 @@ class GrpNetBaseSystem(pl.LightningModule):
         assert gt_labels is not None, "gt_labels cannot be none"
         assert pred_labels is not None, "pred_labels cannot be none"
         # Log the images (Give them different names)
-        _mean_ = torch.tensor([0.485, 0.456, 0.406], device= self.device)
-        _std_ = torch.tensor([0.229, 0.224, 0.225], device= self.device)
+        _mean_ = torch.tensor([0.5, 0.5, 0.5], device= self.device)
+        _std_ = torch.tensor([0.5, 0.5, 0.5], device= self.device)
         _mean_ = _mean_.view(1, 3, 1, 1).expand_as(viz_batch)
         _std_ = _std_.view(1, 3, 1, 1).expand_as(viz_batch)
         unnorm_viz_batch = viz_batch * _std_ + _mean_
@@ -204,10 +204,9 @@ class PARSeqBaseSystem(GrpNetBaseSystem):
         self.d_c_ctx_dropout = nn.ModuleList([nn.Dropout(dropout) for _ in range(self.num_d_c)])
         self.pos_dropout = nn.Dropout(dropout)
         #loss
-        self.h_c_loss = nn.ModuleList([nn.CrossEntropyLoss(reduction= 'mean', ignore_index= self.tokenizer.pad_id) 
+        self.h_c_loss = nn.ModuleList([nn.CrossEntropyLoss(reduction= 'mean', ignore_index= self.tokenizer.pad_id_h_c) 
                                         for _ in range(self.num_h_c)])
-        self.h_c_1_loss = nn.CrossEntropyLoss(reduction= 'mean', ignore_index= self.tokenizer.pad_id)
-        self.f_c_loss = nn.CrossEntropyLoss(reduction= 'mean', ignore_index= self.tokenizer.pad_id)
+        self.f_c_loss = nn.CrossEntropyLoss(reduction= 'mean', ignore_index= self.tokenizer.pad_id_f_c)
         self.d_loss = nn.BCEWithLogitsLoss(reduction= 'mean')
 
         # Trainig Metrics is just loss
@@ -261,49 +260,53 @@ class PARSeqBaseSystem(GrpNetBaseSystem):
         return self.decoder(query= query, context_h_c= h_c_ctx_emb, context_f_c= f_c_ctx_emb, context_d_c= d_c_ctx_emb,
                             memory= memory, query_mask= query_mask, context_key_padding_mask= context_key_padding_mask)
 
-    def _get_flattened_non_pad(self, targets: Tuple[Tensor, Tensor, Tensor, Tensor],
-                                logits: Tuple[Tensor, Tensor, Tensor, Tensor]):
+    def _get_flattened_non_pad(self, targets: Tuple[Sequence[Tensor], Tensor, Tensor],
+                                logits: Tuple[Sequence[Tensor], Tensor, Tensor]):
         """
         Function which returns a flattened version of the targets and logits, it flattens the group dimension
         Args:
-        - targets (tuple(Tensor, Tensor, Tensor, Tensor)): A tuple consisting of half-char 2, half-char 1, full char, & diacritic targets
-        - logits (tuple(Tensor, Tensor, Tensor, Tensor)): A tuple consisting of half-char 2, half-char 1, full char, & diacritic logits
+        - targets (tuple(Sequence[Tensor], Tensor, Tensor)): A tuple consisting of half-char 2, half-char 1, full char, & diacritic targets
+        - logits (tuple(Sequence[Tensor], Tensor, Tensor)): A tuple consisting of half-char 2, half-char 1, full char, & diacritic logits
 
         Returns:
         - tuple(tuple(Tensor, Tensor, Tensor, Tensor), 
             tuple(Tensor, Tensor, Tensor, Tensor)): (half-char 2, half-char 1, full char, & diacritic targets), 
                                                     (half-char 2, half-char 1, full char, & diacritic logits)
         """
-        h_c_2_targets, h_c_1_targets, f_c_targets, d_targets = targets
-        h_c_2_logits, h_c_1_logits, f_c_logits, d_logits = logits
-
-        flat_h_c_2_targets = h_c_2_targets.reshape(-1)
-        flat_h_c_1_targets = h_c_1_targets.reshape(-1)
+        h_c_targets, f_c_targets, d_targets = targets
+        h_c_logits, f_c_logits, d_logits = logits
+        assert self.num_h_c == len(h_c_logits) == len(h_c_targets), f"""# of half-char in logits and target or specified in param do not match 
+                                                                        {self.num_h_c}, {len(h_c_logits)}, {len(h_c_targets)}"""
+        flat_h_c_targets = [h_c.reshape(-1) for h_c in h_c_targets]
         flat_f_c_targets = f_c_targets.reshape(-1)
         flat_d_targets = d_targets.reshape(-1, self.num_d_classes)
         # print(f"The Flattened Targets {flat_h_c_2_targets}\n{flat_h_c_1_targets}\n{flat_f_c_targets}\n{flat_d_targets}\n\n")
 
-        flat_h_c_2_non_pad = (flat_h_c_2_targets != self.tokenizer.pad_id_h_c)
-        flat_h_c_1_non_pad = (flat_h_c_1_targets != self.tokenizer.pad_id_h_c)
+        flat_h_c_non_pad = [(h_c != self.tokenizer.pad_id_h_c) for h_c in flat_h_c_targets]
         flat_f_c_non_pad = (flat_f_c_targets != self.tokenizer.pad_id_f_c)
         d_pad = torch.zeros(self.num_d_classes, dtype = torch.float32, device= self.device)
         d_pad[self.tokenizer.pad_id_d_c] = 1.
         flat_d_non_pad = ~ torch.all(flat_d_targets == d_pad, dim= 1)
-        assert torch.all((flat_h_c_2_non_pad == flat_h_c_1_non_pad) == (flat_f_c_non_pad == flat_d_non_pad)).item(), \
-                f"Pads are not aligned properly {(flat_f_c_non_pad == flat_d_non_pad)} {(flat_h_c_2_non_pad == flat_h_c_1_non_pad)}"
+        flat_h_c_non_pad_check = None
+        for i in range(self.num_h_c):
+            if flat_h_c_non_pad_check:
+                flat_h_c_non_pad_check &= flat_h_c_non_pad[i] == flat_h_c_non_pad[i+1]
+            else:
+                flat_h_c_non_pad_check = flat_h_c_non_pad[i] == flat_h_c_non_pad[i+1]
+        
+        assert torch.all(flat_h_c_non_pad_check == (flat_f_c_non_pad == flat_d_non_pad)).item(), \
+                f"Pads are not aligned properly {(flat_f_c_non_pad == flat_d_non_pad)} {(flat_h_c_non_pad_check)}"
 
-        flat_h_c_2_targets = flat_h_c_2_targets[flat_h_c_2_non_pad]
-        flat_h_c_1_targets = flat_h_c_1_targets[flat_h_c_2_non_pad]
-        flat_f_c_targets = flat_f_c_targets[flat_h_c_2_non_pad]
-        flat_d_targets = flat_d_targets[flat_h_c_2_non_pad]
+        flat_h_c_targets = [h_c[flat_f_c_non_pad] for h_c in flat_h_c_targets]
+        flat_f_c_targets = flat_f_c_targets[flat_f_c_non_pad]
+        flat_d_targets = flat_d_targets[flat_f_c_non_pad]
 
-        flat_h_c_2_logits = h_c_2_logits.reshape(-1, self.num_h_c_classes - 2)[flat_h_c_2_non_pad]
-        flat_h_c_1_logits = h_c_1_logits.reshape(-1, self.num_h_c_classes - 2)[flat_h_c_2_non_pad]
-        flat_f_c_logits = f_c_logits.reshape(-1, self.num_f_c_classes - 2)[flat_h_c_2_non_pad]
-        flat_d_logits = d_logits.reshape(-1, self.num_d_classes - 2)[flat_h_c_2_non_pad]
+        flat_h_c_logits = [h_c.reshape(-1, self.num_h_c_classes - 2)[flat_f_c_non_pad] for h_c in h_c_logits]
+        flat_f_c_logits = f_c_logits.reshape(-1, self.num_f_c_classes - 2)[flat_f_c_non_pad]
+        flat_d_logits = d_logits.reshape(-1, self.num_d_classes - 2)[flat_f_c_non_pad]
 
-        return ((flat_h_c_2_targets, flat_h_c_1_targets, flat_f_c_targets, flat_d_targets[:,:-2]), # dont send PAD and EOS for diacritic
-                (flat_h_c_2_logits, flat_h_c_1_logits, flat_f_c_logits, flat_d_logits))
+        return ((flat_h_c_targets, flat_f_c_targets, flat_d_targets[:,:-2]), # dont send PAD and EOS for diacritic
+                (flat_h_c_logits, flat_f_c_logits, flat_d_logits))
     
     def forward(self, images: Tensor) -> Tensor:
         bs = images.shape[0]
@@ -664,7 +667,6 @@ class PARSeqBaseSystem(GrpNetBaseSystem):
         }
         self.log_dict({**half_char_log_dict, **log_dict_epoch}, on_step = False, on_epoch = True, prog_bar = False, logger = True, sync_dist = True, batch_size= batch_size)
         self.log_dict(log_dict_epoch, on_step = False, on_epoch = True, prog_bar = False, logger = True, sync_dist = True, batch_size= batch_size)
-
 
 class DevanagariBaseSystem(pl.LightningModule):
     """
