@@ -1,4 +1,4 @@
-from model.base import HindiBaseSystem, MalayalamBaseSystem
+from model.base import HindiBaseSystem, MalayalamBaseSystem, PARSeqBaseSystem
 from model.FocalSTR.encoder import FocalNetEncoder
 from torch import Tensor
 from typing import Optional, Sequence, Union, Tuple
@@ -551,41 +551,46 @@ class HindiPARSeq(HindiBaseSystem):
         }
         self.log_dict(log_dict_epoch, on_step = False, on_epoch = True, prog_bar = False, logger = True, sync_dist = True, batch_size= batch_size)
 
-class HindiViTPARSeq(HindiPARSeq):
+class ViTPARSeq(PARSeqBaseSystem):
     def __init__(self, hidden_size: int = 768, num_hidden_layers: int = 12, num_attention_heads: int = 12,
-                 mlp_ratio: float= 4.0, hidden_dropout_prob: float = 0.0,
-                 attention_probs_dropout_prob: float = 0.0, initializer_range: float = 0.02,
+                 mlp_ratio: float= 4.0, dropout:float= 0.0, initializer_range: float = 0.02,
                  layer_norm_eps: float = 1e-12, image_size: int = 128, patch_size: int = 8, 
                  num_channels: int = 3, dec_num_sa_heads:Sequence[Union[Sequence[int], int]] = [[2,2], 4, [2,2]], 
                  dec_num_ca_heads:int= 12, dec_mlp_ratio: int= 4, dec_depth: int= 1, perm_num:int= 25, 
                  perm_forward: bool= True, perm_mirrored: bool= True, decode_ar: bool= True,
-                 refine_iters: int= 1, dropout: float= 0.1, threshold:float= 0.5, max_grps:int = 25,
-                 learning_rate: float= 1e-4, weight_decay: float= 1.0e-4, warmup_pct:float= 0.3,
+                 refine_iters: int= 1, num_h_c:int= 2, num_d_c:int= 2, tokenizer:str= 'HindiPARSeqTokenizer',
+                 threshold:float= 0.5, max_grps:int = 25, learning_rate: float= 1e-4, 
+                 weight_decay: float= 1.0e-4, warmup_pct:float= 0.3,
                  ) -> None:
-        super().__init__(mlp_ratio= mlp_ratio, initializer_range= initializer_range, 
-                 layer_norm_eps= layer_norm_eps, image_size= image_size, patch_size = patch_size, 
-                 num_channels = num_channels, dec_num_sa_heads = dec_num_sa_heads, dec_num_ca_heads= dec_num_ca_heads,
+        super().__init__(hidden_size= hidden_size, num_h_c= num_h_c, num_d_c= num_d_c, tokenizer= tokenizer, 
+                 dec_num_sa_heads= dec_num_sa_heads, dec_num_ca_heads= dec_num_ca_heads,
                  dec_mlp_ratio= dec_mlp_ratio, dec_depth= dec_depth, perm_num= perm_num, 
                  perm_forward= perm_forward, perm_mirrored= perm_mirrored, decode_ar= decode_ar,
                  refine_iters= refine_iters, dropout= dropout, threshold= threshold, max_grps = max_grps,
                  learning_rate= learning_rate, weight_decay= weight_decay, warmup_pct= warmup_pct)
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
+        self.dropout = dropout
         self.num_attention_heads = num_attention_heads
+        self.initializer_range = initializer_range
+        self.mlp_ratio = mlp_ratio
+        self.layer_norm_eps = layer_norm_eps
+        self.image_size = image_size
+        self.patch_size = patch_size
+        self.num_channels = num_channels
+        self.intermediate_size = int(mlp_ratio * hidden_size)
         self.encoder = ViTEncoder(
             hidden_size= self.hidden_size,
             num_hidden_layers= self.num_hidden_layers,
             num_attention_heads= self.num_attention_heads,
             intermediate_size= self.intermediate_size,
             hidden_act= "gelu",
-            hidden_dropout_prob= self.hidden_dropout_prob,
-            attention_probs_dropout_prob= self.attention_probs_dropout_prob,
+            hidden_dropout_prob= self.dropout,
+            attention_probs_dropout_prob= self.dropout,
             initializer_range= self.initializer_range,
             layer_norm_eps= self.layer_norm_eps,
             image_size= self.image_size,
             patch_size= self.patch_size,
             num_channels= self.num_channels,
-            qkv_bias= self.qkv_bias,
+            qkv_bias= True,
         )

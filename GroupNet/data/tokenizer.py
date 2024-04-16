@@ -1313,7 +1313,7 @@ class HindiPARSeqTokenizer(HindiTokenizer):
         self._normalize_charset()
         self.thresh = threshold
         self.max_grps = max_grps
-
+        self.num_f_c_classes = len(self.f_c_classes)
         # dict with class indexes as keys and characters as values
         self.h_c_label_map = {k:c for k,c in enumerate(self.h_c_classes, start = 0)}
         # 0 will be reserved for blank

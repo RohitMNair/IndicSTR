@@ -135,7 +135,7 @@ class GrpNetBaseSystem(pl.LightningModule):
 
 class PARSeqBaseSystem(GrpNetBaseSystem):
     def __init__(self, hidden_size:int, num_h_c:int= 2, num_d_c:int= 2, tokenizer:str= 'HindiPARSeqTokenizer', 
-                 dec_num_sa_heads:Sequence[Union[Sequence[int], int]] = [[2,2], 4, [2,2]], 
+                 dec_num_sa_heads:Sequence[Union[Sequence[int], int]] = [[2,2], 4, [2,2]], layer_norm_eps: float = 1e-12,
                  dec_num_ca_heads:int= 12, dec_mlp_ratio: int= 4, dec_depth: int= 1, perm_num:int= 25, 
                  perm_forward: bool= True, perm_mirrored: bool= True, decode_ar: bool= True,
                  refine_iters: int= 1, dropout: float= 0.1, threshold:float= 0.5, max_grps:int = 25,
@@ -147,6 +147,7 @@ class PARSeqBaseSystem(GrpNetBaseSystem):
         # network params
         self.hidden_size = hidden_size
         self.dropout = dropout
+        self.layer_norm_eps = layer_norm_eps
         # decoder params
         self.dec_num_sa_heads = dec_num_sa_heads
         self.dec_num_ca_heads = dec_num_ca_heads
@@ -188,15 +189,15 @@ class PARSeqBaseSystem(GrpNetBaseSystem):
         self.text_embed = TokenEmbedding(
                             h_c_charset_size= self.num_h_c_classes,
                             f_c_charset_size= self.num_f_c_classes,
-                            d_c_charset_size= self.num_d_classes,
-                            embed_dim= self.hidden_sizes,
+                            d_c_charset_size= self.num_d_c_classes,
+                            embed_dim= self.hidden_size,
                             num_h_c= self.num_h_c,
                             num_d_c= self.num_d_c,
                         )
         self.classifier = Classifier(hidden_size= hidden_size,
-                                    num_half_character_classes= self.num_h_c_classes,
-                                    num_full_character_classes= self.num_f_c_classes,
-                                    num_diacritic_classes= self.num_d_c_classes)
+                                    num_half_character_classes= self.num_h_c_classes - 2, #Ignore EOS and PAD
+                                    num_full_character_classes= self.num_f_c_classes - 2,
+                                    num_diacritic_classes= self.num_d_c_classes - 2)
         # +1 for <eos>
         self.pos_queries = nn.Parameter(torch.Tensor(1, max_grps + 1, self.hidden_size)) # +1 for eos
         self.h_c_ctx_dropout = nn.ModuleList([nn.Dropout(dropout) for _ in range(self.num_h_c)])
@@ -211,7 +212,6 @@ class PARSeqBaseSystem(GrpNetBaseSystem):
 
         # Trainig Metrics is just loss
         # Validation Metrics
-        self.val_h_c_acc = [HalfCharacterAccuracy(threshold = self.threshold) for _ in range(self.num_h_c)]
         self.val_comb_h_c_acc = CombinedHalfCharAccuracy(threshold= self.threshold)
         self.val_f_c_acc = FullCharacterAccuracy(threshold = self.threshold)
         self.val_d_acc = DiacriticAccuracy(threshold = self.threshold)
@@ -219,7 +219,6 @@ class PARSeqBaseSystem(GrpNetBaseSystem):
         # self.val_wrr = ComprihensiveWRR(threshold= self.threshold)
         self.val_wrr2 = WRR2(threshold= self.threshold)
         # Testing Metrics
-        self.test_h_c_acc = [HalfCharacterAccuracy(threshold = self.threshold) for _ in range(self.num_h_c)]
         self.test_comb_h_c_acc = CombinedHalfCharAccuracy(threshold= self.threshold)
         self.test_f_c_acc = FullCharacterAccuracy(threshold = self.threshold)
         self.test_d_acc = DiacriticAccuracy(threshold = self.threshold)
@@ -279,17 +278,17 @@ class PARSeqBaseSystem(GrpNetBaseSystem):
                                                                         {self.num_h_c}, {len(h_c_logits)}, {len(h_c_targets)}"""
         flat_h_c_targets = [h_c.reshape(-1) for h_c in h_c_targets]
         flat_f_c_targets = f_c_targets.reshape(-1)
-        flat_d_targets = d_targets.reshape(-1, self.num_d_classes)
+        flat_d_targets = d_targets.reshape(-1, self.num_d_c_classes)
         # print(f"The Flattened Targets {flat_h_c_2_targets}\n{flat_h_c_1_targets}\n{flat_f_c_targets}\n{flat_d_targets}\n\n")
 
         flat_h_c_non_pad = [(h_c != self.tokenizer.pad_id_h_c) for h_c in flat_h_c_targets]
         flat_f_c_non_pad = (flat_f_c_targets != self.tokenizer.pad_id_f_c)
-        d_pad = torch.zeros(self.num_d_classes, dtype = torch.float32, device= self.device)
+        d_pad = torch.zeros(self.num_d_c_classes, dtype = torch.float32, device= self.device)
         d_pad[self.tokenizer.pad_id_d_c] = 1.
         flat_d_non_pad = ~ torch.all(flat_d_targets == d_pad, dim= 1)
         flat_h_c_non_pad_check = None
-        for i in range(self.num_h_c):
-            if flat_h_c_non_pad_check:
+        for i in range(self.num_h_c - 1):
+            if flat_h_c_non_pad_check is not None:
                 flat_h_c_non_pad_check &= flat_h_c_non_pad[i] == flat_h_c_non_pad[i+1]
             else:
                 flat_h_c_non_pad_check = flat_h_c_non_pad[i] == flat_h_c_non_pad[i+1]
@@ -303,7 +302,7 @@ class PARSeqBaseSystem(GrpNetBaseSystem):
 
         flat_h_c_logits = [h_c.reshape(-1, self.num_h_c_classes - 2)[flat_f_c_non_pad] for h_c in h_c_logits]
         flat_f_c_logits = f_c_logits.reshape(-1, self.num_f_c_classes - 2)[flat_f_c_non_pad]
-        flat_d_logits = d_logits.reshape(-1, self.num_d_classes - 2)[flat_f_c_non_pad]
+        flat_d_logits = d_logits.reshape(-1, self.num_d_c_classes - 2)[flat_f_c_non_pad]
 
         return ((flat_h_c_targets, flat_f_c_targets, flat_d_targets[:,:-2]), # dont send PAD and EOS for diacritic
                 (flat_h_c_logits, flat_f_c_logits, flat_d_logits))
@@ -320,15 +319,15 @@ class PARSeqBaseSystem(GrpNetBaseSystem):
         if self.decode_ar:
             h_c_ctx = []
             for _ in range(self.num_h_c):
-                t_ = torch.full((bs, num_steps), self.tokenizer.pad_id, dtype=torch.long, device=self.device)
+                t_ = torch.full((bs, num_steps), self.tokenizer.pad_id_h_c, dtype=torch.long, device=self.device)
                 t_[:, 0] = self.tokenizer.bos_id_h_c
                 h_c_ctx.append(t_)
 
-            f_c_ctx = torch.full((bs, num_steps), self.tokenizer.pad_id, dtype=torch.long, device=self.device)
+            f_c_ctx = torch.full((bs, num_steps), self.tokenizer.pad_id_f_c, dtype=torch.long, device=self.device)
             f_c_ctx[:, 0] = self.tokenizer.bos_id_f_c
             d_c_ctx = []
             for _ in range(self.num_d_c):
-                t_ = torch.full((bs, num_steps), self.tokenizer.pad_id, dtype=torch.long, device=self.device)
+                t_ = torch.full((bs, num_steps), self.tokenizer.pad_id_d_c, dtype=torch.long, device=self.device)
                 t_[:, 0] = self.tokenizer.bos_id_d_c
                 d_c_ctx.append(t_)
 
@@ -360,8 +359,8 @@ class PARSeqBaseSystem(GrpNetBaseSystem):
             # logits = torch.cat(logits, dim=1)
             logits = [
                         [torch.cat([logit[0][i] for logit in logits], dim= 1) for i in range(self.num_h_c)],
+                        torch.cat([logit[1] for logit in logits], dim= 1),
                         torch.cat([logit[2] for logit in logits], dim= 1),
-                        torch.cat([logit[3] for logit in logits], dim= 1),
                     ]
         else:
             # No prior context, so input is just <bos>. We query all positions.
@@ -380,8 +379,8 @@ class PARSeqBaseSystem(GrpNetBaseSystem):
             bos_d_c = torch.full((bs, 1), self.tokenizer.bos_id_d_c, dtype=torch.long, device=self.device)
             for i in range(self.refine_iters):
                 # Prior context is the previous output. remove the last grp as it is for eos
-                h_c_ctx = [torch.cat([bos_h_c, h_c_logits[:, :-1].argmax(-1)], dim= 1) for h_c_logits in logits[:self.num_h_c]]
-                f_c_ctx = torch.cat([bos_f_c, logits[2][:, :-1].argmax(-1)], dim= 1)
+                h_c_ctx = [torch.cat([bos_h_c, h_c_logits[:, :-1].argmax(-1)], dim= 1) for h_c_logits in logits[0]]
+                f_c_ctx = torch.cat([bos_f_c, logits[1][:, :-1].argmax(-1)], dim= 1)
                 vals, indices = torch.topk(logits[-1][:, :-1], k=self.num_d_c)
                 d_c_ctx = [torch.cat([bos_d_c, indices[:,:,i]], dim= -1) for i in range(self.num_d_c)]
 
@@ -476,16 +475,16 @@ class PARSeqBaseSystem(GrpNetBaseSystem):
         imgs, labels = batch
         batch_size = len(labels)
         h_c_targets, f_c_targets, d_c_targets = ( # +2 for eos and bos
-                                  [torch.zeros(batch_size, self.max_grps + 2, device= self.device, dtype= torch.long) for _ in self.num_h_c],
+                                  [torch.zeros(batch_size, self.max_grps + 2, device= self.device, dtype= torch.long) for _ in range(self.num_h_c)],
                                   torch.zeros(batch_size, self.max_grps + 2, device= self.device, dtype= torch.long),
-                                  torch.zeros(batch_size, self.max_grps + 2, device= self.device, dtype= torch.long),
-                                  torch.zeros(batch_size, self.max_grps + 2, self.num_d_classes, device= self.device),
+                                  torch.zeros(batch_size, self.max_grps + 2, self.num_d_c_classes, device= self.device),
                                 )
         
         n_grps = [self.max_grps + 2 for _ in range(batch_size)]
         for idx,label in enumerate(labels, start= 0):
             label_encoding = self.tokenizer.label_encoder(label, device= self.device)
-            h_c_targets[idx] = label_encoding[:self.num_h_c]
+            for i in range(self.num_h_c):
+                h_c_targets[i][idx] = label_encoding[i]
             f_c_targets[idx], d_c_targets[idx], n_grps[idx] = label_encoding[self.num_h_c:]
         
         # Truncate grps to largest in batch
@@ -506,7 +505,7 @@ class PARSeqBaseSystem(GrpNetBaseSystem):
 
         loss = 0
         loss_numel = 0
-        n = (f_c_targets != self.tokenizer.pad_id).sum().item()
+        n = (f_c_targets != self.tokenizer.pad_id_f_c).sum().item()
         for i, perm in enumerate(tgt_perms):
             tgt_mask, query_mask = self.generate_attn_masks(perm)
             vals, indices = torch.topk(d_c_in, k= self.num_d_c)
@@ -530,7 +529,7 @@ class PARSeqBaseSystem(GrpNetBaseSystem):
             if i == 1:
                 h_c_out = [torch.where(h_c_out[i] == self.tokenizer.eos_id, self.tokenizer.pad_id_h_c, h_c_out[i]) for i in range(self.num_h_c)]
                 f_c_out = torch.where(f_c_out == self.tokenizer.eos_id, self.tokenizer.pad_id_f_c, f_c_out)
-                d_pad, d_eos = [torch.zeros(self.num_d_classes, device= self.device) for _ in range(2)]
+                d_pad, d_eos = [torch.zeros(self.num_d_c_classes, device= self.device) for _ in range(2)]
                 d_pad[self.tokenizer.pad_id_d_c] = d_eos[self.tokenizer.eos_id] = 1.
                 d_c_eos = torch.all(d_c_out == d_eos, dim= -1)
                 d_c_out[d_c_eos] = d_pad
@@ -546,16 +545,16 @@ class PARSeqBaseSystem(GrpNetBaseSystem):
         imgs, labels = batch
         batch_size = len(labels)
         h_c_targets, f_c_targets, d_c_targets = ( # +2 for eos and bos
-                                  [torch.zeros(batch_size, self.max_grps + 2, device= self.device, dtype= torch.long) for _ in self.num_h_c],
+                                  [torch.zeros(batch_size, self.max_grps + 2, device= self.device, dtype= torch.long) for _ in range(self.num_h_c)],
                                   torch.zeros(batch_size, self.max_grps + 2, device= self.device, dtype= torch.long),
-                                  torch.zeros(batch_size, self.max_grps + 2, device= self.device, dtype= torch.long),
-                                  torch.zeros(batch_size, self.max_grps + 2, self.num_d_classes, device= self.device),
+                                  torch.zeros(batch_size, self.max_grps + 2, self.num_d_c_classes, device= self.device),
                                 )
         
         n_grps = [self.max_grps + 2 for _ in range(batch_size)]
         for idx,label in enumerate(labels, start= 0):
             label_encoding = self.tokenizer.label_encoder(label, device= self.device)
-            h_c_targets[idx] = label_encoding[:self.num_h_c]
+            for i in range(self.num_h_c):
+                h_c_targets[i][idx] = label_encoding[i]
             f_c_targets[idx], d_c_targets[idx], n_grps[idx] = label_encoding[self.num_h_c:]
         
         # ignore BOS
@@ -572,9 +571,9 @@ class PARSeqBaseSystem(GrpNetBaseSystem):
                                                                             )
 
         # compute the loss for each character category
-        loss += sum([self.h_c_loss[i](input= flat_h_c_logits[i], target= flat_h_c_targets[i]) for i in range(self.num_h_c)] \
+        loss = sum([self.h_c_loss[i](input= flat_h_c_logits[i], target= flat_h_c_targets[i]) for i in range(self.num_h_c)]) \
             + self.f_c_loss(input= flat_f_c_logits, target= flat_f_c_targets) \
-            + self.d_loss(input= flat_d_c_logits, target= flat_d_c_targets))
+            + self.d_loss(input= flat_d_c_logits, target= flat_d_c_targets)
         # Grp level metrics
         self.val_comb_h_c_acc(flat_h_c_logits, flat_h_c_targets)
         self.val_f_c_acc(flat_f_c_logits, flat_f_c_targets)
@@ -592,7 +591,6 @@ class PARSeqBaseSystem(GrpNetBaseSystem):
             self._log_tb_images(imgs[:5], pred_labels= pred_labels[:5], gt_labels= labels[:5], mode= "val")
 
         # On epoch only logs
-        half_char_log_dict = {f"val_half_char_{self.num_h_c - i}": self.val_h_c_acc[i] for i in range(self.num_h_c)}
         log_dict_epoch = {
             "val_loss": loss,
             "val_combined_half_character_acc": self.val_comb_h_c_acc,
@@ -601,23 +599,23 @@ class PARSeqBaseSystem(GrpNetBaseSystem):
             "val_wrr2": self.val_wrr2, 
             "val_grp_acc": self.val_grp_acc,
         }
-        self.log_dict({**half_char_log_dict, **log_dict_epoch}, on_step = False, on_epoch = True, prog_bar = False, logger = True, sync_dist = True, batch_size= batch_size)
+        self.log_dict(log_dict_epoch, on_step = False, on_epoch = True, prog_bar = False, logger = True, sync_dist = True, batch_size= batch_size)
 
     def test_step(self, batch, batch_no)-> None:
         # batch: img (BS x C x H x W), label (BS)
         imgs, labels = batch
         batch_size = len(labels)
         h_c_targets, f_c_targets, d_c_targets = ( # +2 for eos and bos
-                                  [torch.zeros(batch_size, self.max_grps + 2, device= self.device, dtype= torch.long) for _ in self.num_h_c],
+                                  [torch.zeros(batch_size, self.max_grps + 2, device= self.device, dtype= torch.long) for _ in range(self.num_h_c)],
                                   torch.zeros(batch_size, self.max_grps + 2, device= self.device, dtype= torch.long),
-                                  torch.zeros(batch_size, self.max_grps + 2, device= self.device, dtype= torch.long),
-                                  torch.zeros(batch_size, self.max_grps + 2, self.num_d_classes, device= self.device),
+                                  torch.zeros(batch_size, self.max_grps + 2, self.num_d_c_classes, device= self.device),
                                 )
         
         n_grps = [self.max_grps + 2 for _ in range(batch_size)]
         for idx,label in enumerate(labels, start= 0):
             label_encoding = self.tokenizer.label_encoder(label, device= self.device)
-            h_c_targets[idx] = label_encoding[:self.num_h_c]
+            for i in range(self.num_h_c):
+                h_c_targets[i][idx] = label_encoding[i]
             f_c_targets[idx], d_c_targets[idx], n_grps[idx] = label_encoding[self.num_h_c:]
         
         # ignore BOS
@@ -634,9 +632,9 @@ class PARSeqBaseSystem(GrpNetBaseSystem):
                                                                             )
 
         # compute the loss for each character category
-        loss += sum([self.h_c_loss[i](input= flat_h_c_logits[i], target= flat_h_c_targets[i]) for i in range(self.num_h_c)] \
+        loss = sum([self.h_c_loss[i](input= flat_h_c_logits[i], target= flat_h_c_targets[i]) for i in range(self.num_h_c)]) \
             + self.f_c_loss(input= flat_f_c_logits, target= flat_f_c_targets) \
-            + self.d_loss(input= flat_d_c_logits, target= flat_d_c_targets))
+            + self.d_loss(input= flat_d_c_logits, target= flat_d_c_targets)
         
         # Grp level metrics
         self.test_comb_h_c_acc(flat_h_c_logits, flat_h_c_targets)
@@ -654,7 +652,6 @@ class PARSeqBaseSystem(GrpNetBaseSystem):
         self._log_tb_images(imgs, pred_labels= pred_labels, gt_labels= labels, mode= "test")
             
         # On epoch only logs
-        half_char_log_dict = {f"test_half_char_{self.num_h_c - i}": self.test_h_c_acc[i] for i in range(self.num_h_c)}
         log_dict_epoch = {
             "test_loss": loss,
             "test_combined_half_character_acc": self.test_comb_h_c_acc,
@@ -665,7 +662,6 @@ class PARSeqBaseSystem(GrpNetBaseSystem):
             "test_grp_acc": self.test_grp_acc,
             "NED": self.ned,
         }
-        self.log_dict({**half_char_log_dict, **log_dict_epoch}, on_step = False, on_epoch = True, prog_bar = False, logger = True, sync_dist = True, batch_size= batch_size)
         self.log_dict(log_dict_epoch, on_step = False, on_epoch = True, prog_bar = False, logger = True, sync_dist = True, batch_size= batch_size)
 
 class DevanagariBaseSystem(pl.LightningModule):

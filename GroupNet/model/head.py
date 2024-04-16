@@ -207,7 +207,7 @@ class Classifier(pl.LightningModule):
                                                     in_features = self.hidden_size,
                                                     out_features = self.num_h_c_classes, # extra node for no half-char
                                                     bias = True
-                                                    ) for _ in self.num_h_c])
+                                                    ) for _ in range(self.num_h_c)])
         
         self.character_head = nn.Linear(
                                 in_features = self.hidden_size,
