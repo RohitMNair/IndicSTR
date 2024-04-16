@@ -562,6 +562,7 @@ class ViTPARSeq(PARSeqBaseSystem):
                  threshold:float= 0.5, max_grps:int = 25, learning_rate: float= 1e-4, 
                  weight_decay: float= 1.0e-4, warmup_pct:float= 0.3,
                  ) -> None:
+        self.save_hyperparameters()
         super().__init__(hidden_size= hidden_size, num_h_c= num_h_c, num_d_c= num_d_c, tokenizer= tokenizer, 
                  dec_num_sa_heads= dec_num_sa_heads, dec_num_ca_heads= dec_num_ca_heads,
                  dec_mlp_ratio= dec_mlp_ratio, dec_depth= dec_depth, perm_num= perm_num, 
@@ -594,3 +595,42 @@ class ViTPARSeq(PARSeqBaseSystem):
             num_channels= self.num_channels,
             qkv_bias= True,
         )
+
+class FocalPARSeq(PARSeqBaseSystem):
+    def __init__(self, embed_dim: int = 96, depths:list= [2, 2, 6, 2],
+                 focal_levels:list= [2, 2, 2, 2], focal_windows:list= [3, 3, 3, 3],
+                 mlp_ratio: float= 4.0, drop_path_rate:float = 0.1, dropout:float= 0.1,
+                 initializer_range: float = 0.02, layer_norm_eps: float = 1e-12, image_size: int = 128,
+                 patch_size: int = 8, num_channels: int = 3, 
+                 dec_num_sa_heads:Sequence[Union[Sequence[int], int]] = [[2,2], 4, [2,2]], 
+                 dec_num_ca_heads:int= 12, dec_mlp_ratio: int= 4, dec_depth: int= 1, perm_num:int= 25, 
+                 perm_forward: bool= True, perm_mirrored: bool= True, decode_ar: bool= True,
+                 refine_iters: int= 1, num_h_c:int= 2, num_d_c:int= 2, tokenizer:str= 'HindiPARSeqTokenizer',
+                 threshold:float= 0.5, max_grps:int = 25, learning_rate: float= 1e-4, 
+                 weight_decay: float= 1.0e-4, warmup_pct:float= 0.3,
+                 ) -> None:
+        self.save_hyperparameters()
+        self.embed_dim = embed_dim
+        self.hidden_sizes = [self.embed_dim * (2 ** i) for i in range(len(depths))] 
+        super().__init__(hidden_size= self.hidden_sizes[-1], num_h_c= num_h_c, num_d_c= num_d_c, tokenizer= tokenizer, 
+                 dec_num_sa_heads= dec_num_sa_heads, dec_num_ca_heads= dec_num_ca_heads,
+                 dec_mlp_ratio= dec_mlp_ratio, dec_depth= dec_depth, perm_num= perm_num, 
+                 perm_forward= perm_forward, perm_mirrored= perm_mirrored, decode_ar= decode_ar,
+                 refine_iters= refine_iters, dropout= dropout, threshold= threshold, max_grps = max_grps,
+                 learning_rate= learning_rate, weight_decay= weight_decay, warmup_pct= warmup_pct)
+
+        self.encoder = FocalNetEncoder(
+                        hidden_dropout_prob= dropout, 
+                        initializer_range = initializer_range,
+                        image_size= image_size, 
+                        patch_size= patch_size, 
+                        num_channels = num_channels,
+                        embed_dim= embed_dim,
+                        hidden_sizes = self.hidden_sizes, 
+                        depths = depths,
+                        focal_levels= focal_levels,
+                        focal_windows= focal_windows,
+                        mlp_ratio= mlp_ratio,
+                        drop_path_rate= drop_path_rate,
+                        layer_norm_eps= layer_norm_eps,
+                    )

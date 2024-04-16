@@ -70,7 +70,7 @@ class HindiTokenizer:
         self.d_classes = tuple([unicodedata.normalize("NFKD", c) for c in self.d_classes])
     
     def get_charset(self)-> list:
-        return self.h_c_classes + self.f_c_classes + self.d_classes
+        return self.h_c_classes + self.f_c_classes + self.d_classes + (self.halanth, )
     
     def _check_h_c(self, label:str, idx:int)-> bool:
         """
@@ -421,7 +421,7 @@ class DevanagariTokenizer:
         """
         returns the complete charset used by the tokenizer
         """
-        return self.h_c_classes + self.f_c_classes + self.d_classes
+        return self.h_c_classes + self.f_c_classes + self.d_classes + (self.halanth, )
     
     def _normalize_charset(self):
         """
@@ -1349,21 +1349,117 @@ class HindiPARSeqTokenizer(HindiTokenizer):
         d_target[0, self.bos_id_d_c] = 1.
         h_c_2_target[0] = h_c_1_target[0] = self.bos_id_h_c
         f_c_target[0] = self.bos_id_f_c
-        # truncate grps if grps exceed max_grps
+        eos_idx = self.max_grps + 1
+
         if len(grps) <= self.max_grps:
-            eos_idx = len(grps) + 1
-            # assign eos after the last group
-            h_c_2_target[eos_idx], h_c_1_target[eos_idx], f_c_target[eos_idx] = self.eos_id, self.eos_id, self.eos_id
-            d_target[eos_idx, self.eos_id] = 1.
-            d_target[eos_idx, self.pad_id_d_c] = 0.
-                                                                                        
-        else:
+            eos_idx = len(grps) + 1                                                                                   
+        else: # truncate grps if grps exceed max_grps
             eos_idx = self.max_grps + 1
             grps = grps[:self.max_grps]
-            h_c_2_target[eos_idx], h_c_1_target[eos_idx], f_c_target[eos_idx] = self.eos_id, self.eos_id, self.eos_id
-            d_target[eos_idx, self.eos_id] = 1.
-            d_target[eos_idx, self.pad_id_d_c] = 0.
+        
+        # assign eos after the last group  
+        h_c_2_target[eos_idx] = h_c_1_target[eos_idx] = f_c_target[eos_idx] = self.eos_id
+        d_target[eos_idx, self.eos_id] = 1.
+        d_target[eos_idx, self.pad_id_d_c] = 0.
        
         for idx,grp in enumerate(grps, start= 1):
             h_c_2_target[idx], h_c_1_target[idx], f_c_target[idx], d_target[idx] = self.grp_class_encoder(grp=grp)
+
         return h_c_2_target.to(device), h_c_1_target.to(device), f_c_target.to(device), d_target.to(device), len(grps) + 2
+
+class MalayalamPARSeqTokenizer(MalayalamTokenizer):
+    """
+    Class for encoding and decoding labels
+    """
+    BOS = "[S]"
+    BLANK = "[B]"
+    EOS = "[E]"
+    PAD = "[P]"
+    def __init__(self, threshold:float= 0.5, max_grps:int= 25):
+        self.svar = ['അ', 'ആ', 'ഇ', 'ഈ', 'ഉ', 'ഊ', 'ഋ', 'എ', 'ഏ', 'ഐ',
+                    'ഒ', 'ഓ', 'ഔ']  # 'ൠ' has not been added as it has not been used in recent malayalam
+        self.vyanjan = ['ക', 'ഖ', 'ഗ', 'ഘ', 'ങ',
+                        'ച', 'ഛ', 'ജ', 'ഝ', 'ഞ',
+                        'ട', 'ഠ', 'ഡ', 'ഢ', 'ണ',
+                        'ത', 'ഥ', 'ദ', 'ധ', 'ന',
+                        'പ', 'ഫ', 'ബ', 'ഭ', 'മ',
+                        'യ', 'ര', 'ല', 'വ', 'ശ',
+                        'ഷ', 'സ', 'ഹ', 'ള', 'ഴ', 'റ']
+        self.matras = ['ാ', 'ി', 'ീ', 'ു', 'ൂ', 'ൃ', 'ൈ', 'ൗ', 'െ', 'േ', 'ം', 'ഃ', '഻', 'ു്']
+        # halanth is also referred as chandrakala in malayalam
+        self.halanth = '്'
+        self.chinh =  ['₹', '।', '!', '$', '%', '?', '.', ',', "-", '(', ')']
+        self.ank = ['൦', '൧', '൨', '൩', '൪', '൫', '൬', '൭', '൮', '൯']  # numbers
+
+        self.chillaksharam = ['ൺ', 'ൻ', 'ർ', 'ൽ', 'ൾ']
+        self.special_matra = ['ം', 'ഃ']
+        self._normalize_charset()
+        self.threshold = threshold
+        self.max_grps = max_grps
+        self.h_c_classes = [self.EOS, self.BLANK] + self.vyanjan + [self.PAD, self.BOS]
+        self.f_c_classes = [self.EOS, self.BLANK] \
+                            + self.vyanjan + self.svar + self.ank + self.chinh + self.chillaksharam \
+                            + [self.PAD, self.BOS]
+        self.d_c_classes =  [self.EOS,] + self.matras + [self.PAD, self.BOS] # binary classification
+        self.eos_id = 0
+        self.blank_id = 1
+        self.pad_id_h_c = len(self.h_c_classes) - 2
+        self.pad_id_f_c = len(self.f_c_classes) - 2
+        self.pad_id_d_c = len(self.d_c_classes) - 2
+        self.bos_id_h_c = len(self.h_c_classes) - 1
+        self.bos_id_f_c = len(self.f_c_classes) - 1
+        self.bos_id_d_c = len(self.d_c_classes) - 1
+        
+        # dict with class indexes as keys and characters as values
+        self.h_c_label_map = {k:c for k,c in enumerate(self.h_c_classes, start = 0)}
+        # 0 will be reserved for blank
+        self.f_c_label_map = {k:c for k,c in enumerate(self.f_c_classes, start = 0)}
+        # blank not needed for embedding as it is Binary classification of each diacritic
+        self.d_c_label_map = {k:c for k,c in enumerate(self.d_classes, start = 0)}
+        
+        # dict with characters as keys and class indexes as values
+        self.rev_h_c_label_map = {c:k for k,c in enumerate(self.h_c_classes, start = 0)}
+        self.rev_f_c_label_map = {c:k for k,c in enumerate(self.f_c_classes, start = 0)}
+        self.rev_d_label_map = {c:k for k,c in enumerate(self.d_classes, start= 0)}
+
+    def label_encoder(self, label:str, device:torch.device)-> Tuple[Tensor, Tensor, Tensor, Tensor, int]:
+        """
+        Converts the text label into classes indexes for classification
+        Args:
+        - label (str): The label to be encoded
+        - device (torch.device): Device in which the encodings should be saved
+
+        Returns:
+        - tuple(Tensor, Tensor, Tensor, Tensor, Tensor, int): half-char 3-1 class index, full char class index,
+                                        diacritic one hot encoding
+        """
+        grps = self.label_transform(label= label)
+        h_c_3_target, h_c_2_target, h_c_1_target, f_c_target, d_target = (
+                                                            torch.full((self.max_grps + 2,), self.pad_id, dtype= torch.long),
+                                                            torch.full((self.max_grps + 2,), self.pad_id, dtype= torch.long), 
+                                                            torch.full((self.max_grps + 2,), self.pad_id, dtype= torch.long),
+                                                            torch.full((self.max_grps + 2,), self.pad_id, dtype= torch.long),
+                                                            torch.zeros(self.max_grps + 2, len(self.d_classes), dtype= torch.long)
+                                                        )
+        d_target[:,self.pad_id] = 1.
+        d_target[1:, self.pad_id_d_c] = 1.
+        d_target[0, self.bos_id_d_c] = 1.
+        h_c_3_target[0] = h_c_2_target[0] = h_c_1_target[0] = self.bos_id_h_c
+        f_c_target[0] = self.bos_id_f_c
+        eos_idx = self.max_grps + 1
+        
+        if len(grps) <= self.max_grps:
+            eos_idx = len(grps) + 1                                          
+        else: # truncate grps if grps exceed max_grps
+            eos_idx = self.max_grps + 1
+            grps = grps[:self.max_grps]
+
+       # assign eos after the last group
+        h_c_3_target[eos_idx] = h_c_2_target[eos_idx] = h_c_1_target[eos_idx] = f_c_target[eos_idx] = self.eos_id
+        d_target[eos_idx, self.eos_id] = 1.
+        d_target[eos_idx, self.pad_id_d_c] = 0.
+
+        for idx,grp in enumerate(grps, start= 0):
+            h_c_3_target[idx], h_c_2_target[idx], h_c_1_target[idx], f_c_target[idx], d_target[idx] = self.grp_class_encoder(grp=grp)
+
+        return h_c_3_target.to(device), h_c_2_target.to(device), h_c_1_target.to(device), f_c_target.to(device), d_target.to(device), len(grps)

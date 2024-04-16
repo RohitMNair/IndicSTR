@@ -20,7 +20,7 @@ def main(cfg: DictConfig):
     Function to train character embeddings
     """
     composed = transforms.Compose([
-        # rand_augment_transform(),
+        rand_augment_transform(),
         transforms.ToTensor(),
         transforms.RandomRotation(
             degrees= cfg.transforms.rotation, 
@@ -29,21 +29,21 @@ def main(cfg: DictConfig):
         ),
         RescaleTransform(cfg.transforms.img_size),
         PadTransform(cfg.transforms.img_size),
-        transforms.Normalize(
-            mean=[0.485, 0.456, 0.406],
-            std=[0.229, 0.224, 0.225]
-        ),
-        # transforms.Normalize(0.5, 0.5)
+        # transforms.Normalize(
+        #     mean=[0.485, 0.456, 0.406],
+        #     std=[0.229, 0.224, 0.225]
+        # ),
+        transforms.Normalize(0.5, 0.5)
         ])
     test_composed = transforms.Compose([
         transforms.ToTensor(),
         RescaleTransform(cfg.transforms.img_size),
         PadTransform(cfg.transforms.img_size),
-        # transforms.Normalize(0.5, 0.5),
-        transforms.Normalize(
-            mean=[0.485, 0.456, 0.406],
-            std=[0.229, 0.224, 0.225]
-        ),
+        transforms.Normalize(0.5, 0.5),
+        # transforms.Normalize(
+        #     mean=[0.485, 0.456, 0.406],
+        #     std=[0.229, 0.224, 0.225]
+        # ),
         ])
 
     datamodule = instantiate(cfg.datamodule, transforms = composed, test_transforms = test_composed)
