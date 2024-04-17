@@ -314,15 +314,29 @@ class HindiTokenizer:
             "Diacritic preds and max must contain 2 elements for 2 diacritics"
         
         grp = ""
-        grp += self.h_c_label_map[int(h_c_2_pred.item())] + self.halanth if self.h_c_label_map[int(h_c_2_pred.item())] != HindiTokenizer.BLANK \
-            and self.h_c_label_map[int(h_c_2_pred.item())] != HindiTokenizer.PAD else ""
-        grp += self.h_c_label_map[int(h_c_1_pred.item())] + self.halanth if self.h_c_label_map[int(h_c_1_pred.item())] != HindiTokenizer.BLANK \
-            and self.h_c_label_map[int(h_c_1_pred.item())] != HindiTokenizer.PAD else ""
+        grp += self.h_c_label_map[int(h_c_2_pred.item())] + self.halanth if self.h_c_label_map[int(h_c_2_pred.item())] != self.BLANK \
+            and self.h_c_label_map[int(h_c_2_pred.item())] != self.PAD else ""
+        grp += self.h_c_label_map[int(h_c_1_pred.item())] + self.halanth if self.h_c_label_map[int(h_c_1_pred.item())] != self.BLANK \
+            and self.h_c_label_map[int(h_c_1_pred.item())] != self.PAD else ""
         grp += self.f_c_label_map[int(f_c_pred.item())]
-        grp += self.d_c_label_map[int(d_pred[0].item())] if d_max[0] else ""
-        grp += self.d_c_label_map[int(d_pred[1].item())] if d_max[1] else ""
+        # grp += self.d_c_label_map[int(d_pred[0].item())] if d_max[0] else ""
+        # grp += self.d_c_label_map[int(d_pred[1].item())] if d_max[1] else ""
+        d = ""
+        d1 = self.d_c_label_map[int(d_pred[0].item())] if d_max[0] else ""
+        d2 = self.d_c_label_map[int(d_pred[1].item())] if d_max[1] else ""
+        if d1 in unicodedata.normalize("NFKD",'़'):
+            d = d1 + d2
+        elif d1 in unicodedata.normalize("NFKD",'ं'):
+            d = d2 + d1
+        elif d2 in unicodedata.normalize("NFKD",'़'):
+            d = d2 + d1
+        elif d2 in unicodedata.normalize("NFKD",'ं'):
+            d = d1 + d2
+        else:
+            d = d1 + d2
+        grp += d
                 
-        return grp.replace(HindiTokenizer.BLANK, "").replace(HindiTokenizer.PAD, "") # remove all [B], [P] occurences
+        return grp.replace(self.BLANK, "").replace(self.PAD, "") # remove all [B], [P] occurences
                 
     def decode(self, logits:Tuple[Tensor, Tensor, Tensor, Tensor])-> tuple:
         """

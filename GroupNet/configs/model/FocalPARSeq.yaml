@@ -1,4 +1,4 @@
-_target_: model.PARSeq.net.HindiPARSeq
+_target_: model.PARSeq.net.FocalPARSeq
 # encoder args
 # hidden_sizes: [128, 256, 512, 1024] # FocalNet Base
 embed_dim: 129 # hidden_sizes will be embed_dim * (2 ** stage_no) starting from 0
