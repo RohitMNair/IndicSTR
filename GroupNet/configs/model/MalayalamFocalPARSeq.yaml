@@ -14,7 +14,7 @@ image_size: 128
 patch_size: 4
 num_channels: 3
 #Decoder args
-dec_num_sa_heads: [[2,2], 4, [2,2]]
+dec_num_sa_heads: [[2,2,2], 4, [2,2,2]]
 dec_num_ca_heads: 12
 dec_mlp_ratio: 4
 dec_depth: 1
@@ -24,9 +24,9 @@ perm_mirrored: True
 decode_ar: True
 refine_iters: 1
 # tokenizer args
-num_h_c: 2
-num_d_c: 2
-tokenizer: HindiPARSeqTokenizer
+num_h_c: 3
+num_d_c: 3
+tokenizer: MalayalamPARSeqTokenizer
 threshold: 0.5
 max_grps: 25
 # training args

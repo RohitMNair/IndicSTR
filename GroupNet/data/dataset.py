@@ -22,7 +22,7 @@ class LMDBDataset(Dataset):
         self.remove_unseen = remove_unseen
         self.items = []
         self.processed_indexes = []
-        if self.language== 'devanagari':
+        if self.language == 'devanagari':
             self.tokenizer = DevanagariTokenizer()
         elif self.language == 'hindi':
             self.tokenizer = HindiTokenizer()

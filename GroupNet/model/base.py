@@ -197,7 +197,8 @@ class PARSeqBaseSystem(GrpNetBaseSystem):
         self.classifier = Classifier(hidden_size= hidden_size,
                                     num_half_character_classes= self.num_h_c_classes - 2, #Ignore EOS and PAD
                                     num_full_character_classes= self.num_f_c_classes - 2,
-                                    num_diacritic_classes= self.num_d_c_classes - 2)
+                                    num_diacritic_classes= self.num_d_c_classes - 2,
+                                    num_h_c= self.num_h_c)
         # +1 for <eos>
         self.pos_queries = nn.Parameter(torch.Tensor(1, max_grps + 1, self.hidden_size)) # +1 for eos
         self.h_c_ctx_dropout = nn.ModuleList([nn.Dropout(dropout) for _ in range(self.num_h_c)])
@@ -640,12 +641,12 @@ class PARSeqBaseSystem(GrpNetBaseSystem):
         self.test_comb_h_c_acc(flat_h_c_logits, flat_h_c_targets)
         self.test_f_c_acc(flat_f_c_logits, flat_f_c_targets)
         self.test_d_acc(flat_d_c_logits, flat_d_c_targets)
-        self.test_grp_acc((*flat_h_c_logits, flat_f_c_logits, flat_d_c_logits),\
-                           (*flat_h_c_targets, flat_f_c_targets, flat_d_c_targets))
+        self.test_grp_acc((flat_h_c_logits, flat_f_c_logits, flat_d_c_logits),\
+                           (flat_h_c_targets, flat_f_c_targets, flat_d_c_targets))
         
         # Word level metric
         self.test_wrr2((h_c_logits, f_c_logits, d_c_logits),\
-                      (h_c_out, f_c_out, d_c_out), self.tokenizer.pad_id)
+                      (h_c_out, f_c_out, d_c_out[:,:,:-2]), self.tokenizer.pad_id_f_c)
         pred_labels= self.tokenizer.decode((*h_c_logits, f_c_logits, d_c_logits))
         self.test_wrr(pred_strs= pred_labels, target_strs= labels)        
         self.ned(pred_labels= pred_labels, target_labels= labels)
@@ -1213,42 +1214,43 @@ class HindiBaseSystem(pl.LightningModule):
         
         # print(f"The loss: {loss}")
         # Grp level metrics
-        self.train_h_c_2_acc(flat_h_c_2_logits, flat_h_c_2_targets)
-        self.train_h_c_1_acc(flat_h_c_1_logits, flat_h_c_1_targets)
-        self.train_comb_h_c_acc((flat_h_c_2_logits, flat_h_c_1_logits),\
-                                 (flat_h_c_2_targets, flat_h_c_1_targets))
-        self.train_f_c_acc(flat_f_c_logits, flat_f_c_targets)
-        self.train_d_acc(flat_d_logits, flat_d_targets)
-        self.train_grp_acc(([flat_h_c_2_logits, flat_h_c_1_logits], flat_f_c_logits, flat_d_logits),\
-                           ([flat_h_c_2_targets, flat_h_c_1_targets], flat_f_c_targets, flat_d_targets))
-        # Word level metric
-        self.train_wrr2(([h_c_2_logits, h_c_1_logits], f_c_logits, d_logits),\
-                       ([h_c_2_targets, h_c_1_targets], f_c_targets, d_targets), self.tokenizer.pad_id)
-        # self.train_wrr(pred_strs= self.tokenizer.decode((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits)), target_strs= labels)
+        # self.train_h_c_2_acc(flat_h_c_2_logits, flat_h_c_2_targets)
+        # self.train_h_c_1_acc(flat_h_c_1_logits, flat_h_c_1_targets)
+        # self.train_comb_h_c_acc((flat_h_c_2_logits, flat_h_c_1_logits),\
+        #                          (flat_h_c_2_targets, flat_h_c_1_targets))
+        # self.train_f_c_acc(flat_f_c_logits, flat_f_c_targets)
+        # self.train_d_acc(flat_d_logits, flat_d_targets)
+        # self.train_grp_acc(([flat_h_c_2_logits, flat_h_c_1_logits], flat_f_c_logits, flat_d_logits),\
+        #                    ([flat_h_c_2_targets, flat_h_c_1_targets], flat_f_c_targets, flat_d_targets))
+        # # Word level metric
+        # self.train_wrr2(([h_c_2_logits, h_c_1_logits], f_c_logits, d_logits),\
+        #                ([h_c_2_targets, h_c_1_targets], f_c_targets, d_targets), self.tokenizer.pad_id)
+        # # self.train_wrr(pred_strs= self.tokenizer.decode((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits)), target_strs= labels)
 
-        if batch_no % 1000000 == 0:
-            pred_labels = self.tokenizer.decode((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits))            
-            self._log_tb_images(imgs[:5], pred_labels= pred_labels[:5], gt_labels= labels[:5], mode= "train")
-        # On step logs for proggress bar display
-        log_dict_step = {
-            "train_loss_step": loss,
-            "train_wrr2_step": self.train_wrr2,
-            "train_grp_acc_step": self.train_grp_acc,
-        }
-        self.log_dict(log_dict_step, on_step = True, on_epoch = False, prog_bar = True, logger = True, sync_dist=True, batch_size= batch_size)
-
-        # On epoch only logs
-        log_dict_epoch = {
-            "train_loss_epoch": loss,
-            "train_half_character2_acc": self.train_h_c_2_acc,
-            "train_half_character1_acc": self.train_h_c_1_acc,
-            "train_combined_half_character_acc": self.train_comb_h_c_acc,
-            "train_character_acc": self.train_f_c_acc,
-            "train_diacritic_acc": self.train_d_acc,
-            "train_wrr2_epoch": self.train_wrr2, 
-            "train_grp_acc_epoch": self.train_grp_acc,
-        }
-        self.log_dict(log_dict_epoch, on_step = False, on_epoch = True, prog_bar = False, logger = True, sync_dist = True, batch_size= batch_size)  
+        # if batch_no % 1000000 == 0:
+        #     pred_labels = self.tokenizer.decode((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits))            
+        #     self._log_tb_images(imgs[:5], pred_labels= pred_labels[:5], gt_labels= labels[:5], mode= "train")
+        # # On step logs for proggress bar display
+        # log_dict_step = {
+        #     "train_loss_step": loss,
+        #     "train_wrr2_step": self.train_wrr2,
+        #     "train_grp_acc_step": self.train_grp_acc,
+        # }
+        # self.log_dict(log_dict_step, on_step= True, on_epoch = False, prog_bar= True, logger = True, sync_dist=True, batch_size= batch_size)
+        self.log("training_loss_step", loss, on_step= True, on_epoch = False, prog_bar= True, logger = True, sync_dist=True, batch_size= batch_size)
+        self.log("training_loss_epoch", loss, on_step= False, on_epoch= True, prog_bar= False, logger = True, sync_dist=True, batch_size= batch_size)
+        # # On epoch only logs
+        # log_dict_epoch = {
+        #     "train_loss_epoch": loss,
+        #     "train_half_character2_acc": self.train_h_c_2_acc,
+        #     "train_half_character1_acc": self.train_h_c_1_acc,
+        #     "train_combined_half_character_acc": self.train_comb_h_c_acc,
+        #     "train_character_acc": self.train_f_c_acc,
+        #     "train_diacritic_acc": self.train_d_acc,
+        #     "train_wrr2_epoch": self.train_wrr2, 
+        #     "train_grp_acc_epoch": self.train_grp_acc,
+        # }
+        # self.log_dict(log_dict_epoch, on_step = False, on_epoch = True, prog_bar = False, logger = True, sync_dist = True, batch_size= batch_size)  
 
         return loss
 
@@ -1581,45 +1583,45 @@ class MalayalamBaseSystem(pl.LightningModule):
             + self.d_loss(input= flat_d_logits, target= flat_d_targets)
         # print(f"The loss: {loss}")
         # Grp level metrics
-        self.train_h_c_3_acc(flat_h_c_3_logits, flat_h_c_3_targets)
-        self.train_h_c_2_acc(flat_h_c_2_logits, flat_h_c_2_targets)
-        self.train_h_c_1_acc(flat_h_c_1_logits, flat_h_c_1_targets)
-        self.train_comb_h_c_acc((flat_h_c_3_logits, flat_h_c_2_logits, flat_h_c_1_logits),\
-                                 (flat_h_c_3_targets, flat_h_c_2_targets, flat_h_c_1_targets))
-        self.train_f_c_acc(flat_f_c_logits, flat_f_c_targets)
-        self.train_d_acc(flat_d_logits, flat_d_targets)
-        self.train_grp_acc((flat_h_c_3_logits, flat_h_c_2_logits, flat_h_c_1_logits, flat_f_c_logits, flat_d_logits),\
-                           (flat_h_c_3_targets, flat_h_c_2_targets, flat_h_c_1_targets, flat_f_c_targets, flat_d_targets))
-        # Word level metric
-        self.train_wrr2((h_c_3_logits, h_c_2_logits, h_c_1_logits, f_c_logits, d_logits),\
-                       (h_c_3_targets, h_c_2_targets, h_c_1_targets, f_c_targets, d_targets), self.tokenizer.pad_id)
-        # self.train_wrr(pred_strs= self.tokenizer.decode((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits)), target_strs= labels)
+        # self.train_h_c_3_acc(flat_h_c_3_logits, flat_h_c_3_targets)
+        # self.train_h_c_2_acc(flat_h_c_2_logits, flat_h_c_2_targets)
+        # self.train_h_c_1_acc(flat_h_c_1_logits, flat_h_c_1_targets)
+        # self.train_comb_h_c_acc((flat_h_c_3_logits, flat_h_c_2_logits, flat_h_c_1_logits),\
+        #                          (flat_h_c_3_targets, flat_h_c_2_targets, flat_h_c_1_targets))
+        # self.train_f_c_acc(flat_f_c_logits, flat_f_c_targets)
+        # self.train_d_acc(flat_d_logits, flat_d_targets)
+        # self.train_grp_acc((flat_h_c_3_logits, flat_h_c_2_logits, flat_h_c_1_logits, flat_f_c_logits, flat_d_logits),\
+        #                    (flat_h_c_3_targets, flat_h_c_2_targets, flat_h_c_1_targets, flat_f_c_targets, flat_d_targets))
+        # # Word level metric
+        # self.train_wrr2((h_c_3_logits, h_c_2_logits, h_c_1_logits, f_c_logits, d_logits),\
+        #                (h_c_3_targets, h_c_2_targets, h_c_1_targets, f_c_targets, d_targets), self.tokenizer.pad_id)
+        # # self.train_wrr(pred_strs= self.tokenizer.decode((h_c_2_logits, h_c_1_logits, f_c_logits, d_logits)), target_strs= labels)
 
-        if batch_no % 1000000 == 0:
-            pred_labels = self.tokenizer.decode((h_c_3_logits, h_c_2_logits, h_c_1_logits, f_c_logits, d_logits))            
-            self._log_tb_images(imgs[:5], pred_labels= pred_labels[:5], gt_labels= labels[:5], mode= "train")
-        # On step logs for proggress bar display
-        log_dict_step = {
-            "train_loss_step": loss,
-            "train_wrr2_step": self.train_wrr2,
-            "train_grp_acc_step": self.train_grp_acc,
-        }
-        self.log_dict(log_dict_step, on_step = True, on_epoch = False, prog_bar = True, logger = True, sync_dist=True, batch_size= batch_size)
-
-        # On epoch only logs
-        log_dict_epoch = {
-            "train_loss_epoch": loss,
-            "train_half_character3_acc": self.train_h_c_3_acc,
-            "train_half_character2_acc": self.train_h_c_2_acc,
-            "train_half_character1_acc": self.train_h_c_1_acc,
-            "train_combined_half_character_acc": self.train_comb_h_c_acc,
-            "train_character_acc": self.train_f_c_acc,
-            "train_diacritic_acc": self.train_d_acc,
-            "train_wrr2_epoch": self.train_wrr2, 
-            "train_grp_acc_epoch": self.train_grp_acc,
-        }
-        self.log_dict(log_dict_epoch, on_step = False, on_epoch = True, prog_bar = False, logger = True, sync_dist = True, batch_size= batch_size)  
-
+        # if batch_no % 1000000 == 0:
+        #     pred_labels = self.tokenizer.decode((h_c_3_logits, h_c_2_logits, h_c_1_logits, f_c_logits, d_logits))            
+        #     self._log_tb_images(imgs[:5], pred_labels= pred_labels[:5], gt_labels= labels[:5], mode= "train")
+        # # On step logs for proggress bar display
+        # log_dict_step = {
+        #     "train_loss_step": loss,
+        #     "train_wrr2_step": self.train_wrr2,
+        #     "train_grp_acc_step": self.train_grp_acc,
+        # }
+        # self.log_dict(log_dict_step, on_step = True, on_epoch = False, prog_bar = True, logger = True, sync_dist=True, batch_size= batch_size)
+        self.log("training_loss_step", loss, on_step = True, on_epoch = False, prog_bar = True, logger = True, sync_dist=True, batch_size= batch_size)
+        self.log("training_loss_epoch", loss, on_step = False, on_epoch = True, prog_bar = False, logger = True, sync_dist=True, batch_size= batch_size)
+        # # On epoch only logs
+        # log_dict_epoch = {
+        #     "train_loss_epoch": loss,
+        #     "train_half_character3_acc": self.train_h_c_3_acc,
+        #     "train_half_character2_acc": self.train_h_c_2_acc,
+        #     "train_half_character1_acc": self.train_h_c_1_acc,
+        #     "train_combined_half_character_acc": self.train_comb_h_c_acc,
+        #     "train_character_acc": self.train_f_c_acc,
+        #     "train_diacritic_acc": self.train_d_acc,
+        #     "train_wrr2_epoch": self.train_wrr2, 
+        #     "train_grp_acc_epoch": self.train_grp_acc,
+        # }
+        # self.log_dict(log_dict_epoch, on_step = False, on_epoch = True, prog_bar = False, logger = True, sync_dist = True, batch_size= batch_size)
         return loss
 
     def validation_step(self, batch, batch_no)-> None:

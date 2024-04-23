@@ -326,14 +326,18 @@ class HindiTokenizer:
         d2 = self.d_c_label_map[int(d_pred[1].item())] if d_max[1] else ""
         if d1 in unicodedata.normalize("NFKD",'़'):
             d = d1 + d2
-        elif d1 in unicodedata.normalize("NFKD",'ं'):
-            d = d2 + d1
         elif d2 in unicodedata.normalize("NFKD",'़'):
+            d = d2 + d1
+        elif d1 in unicodedata.normalize("NFKD",'ं'):
             d = d2 + d1
         elif d2 in unicodedata.normalize("NFKD",'ं'):
             d = d1 + d2
-        else:
+        elif d1 in unicodedata.normalize("NFKD", 'ः'):
+            d = d2 + d1
+        elif d2 in unicodedata.normalize("NFKD", 'ः'):
             d = d1 + d2
+        else:
+            d = d1 # only 1 diacritic can come in this case
         grp += d
                 
         return grp.replace(self.BLANK, "").replace(self.PAD, "") # remove all [B], [P] occurences
@@ -1414,15 +1418,15 @@ class MalayalamPARSeqTokenizer(MalayalamTokenizer):
         self.f_c_classes = [self.EOS, self.BLANK] \
                             + self.vyanjan + self.svar + self.ank + self.chinh + self.chillaksharam \
                             + [self.PAD, self.BOS]
-        self.d_c_classes =  [self.EOS,] + self.matras + [self.PAD, self.BOS] # binary classification
+        self.d_classes =  [self.EOS,] + self.matras + [self.PAD, self.BOS] # binary classification
         self.eos_id = 0
         self.blank_id = 1
         self.pad_id_h_c = len(self.h_c_classes) - 2
         self.pad_id_f_c = len(self.f_c_classes) - 2
-        self.pad_id_d_c = len(self.d_c_classes) - 2
+        self.pad_id_d_c = len(self.d_classes) - 2
         self.bos_id_h_c = len(self.h_c_classes) - 1
         self.bos_id_f_c = len(self.f_c_classes) - 1
-        self.bos_id_d_c = len(self.d_c_classes) - 1
+        self.bos_id_d_c = len(self.d_classes) - 1
         
         # dict with class indexes as keys and characters as values
         self.h_c_label_map = {k:c for k,c in enumerate(self.h_c_classes, start = 0)}
@@ -1449,13 +1453,13 @@ class MalayalamPARSeqTokenizer(MalayalamTokenizer):
         """
         grps = self.label_transform(label= label)
         h_c_3_target, h_c_2_target, h_c_1_target, f_c_target, d_target = (
-                                                            torch.full((self.max_grps + 2,), self.pad_id, dtype= torch.long),
-                                                            torch.full((self.max_grps + 2,), self.pad_id, dtype= torch.long), 
-                                                            torch.full((self.max_grps + 2,), self.pad_id, dtype= torch.long),
-                                                            torch.full((self.max_grps + 2,), self.pad_id, dtype= torch.long),
+                                                            torch.full((self.max_grps + 2,), self.pad_id_h_c, dtype= torch.long),
+                                                            torch.full((self.max_grps + 2,), self.pad_id_h_c, dtype= torch.long), 
+                                                            torch.full((self.max_grps + 2,), self.pad_id_h_c, dtype= torch.long),
+                                                            torch.full((self.max_grps + 2,), self.pad_id_f_c, dtype= torch.long),
                                                             torch.zeros(self.max_grps + 2, len(self.d_classes), dtype= torch.long)
                                                         )
-        d_target[:,self.pad_id] = 1.
+        d_target[:,self.pad_id_d_c] = 1.
         d_target[1:, self.pad_id_d_c] = 1.
         d_target[0, self.bos_id_d_c] = 1.
         h_c_3_target[0] = h_c_2_target[0] = h_c_1_target[0] = self.bos_id_h_c
