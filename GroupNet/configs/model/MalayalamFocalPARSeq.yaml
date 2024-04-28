@@ -18,7 +18,7 @@ dec_num_sa_heads: [[2,2,2], 4, [2,2,2]]
 dec_num_ca_heads: 12
 dec_mlp_ratio: 4
 dec_depth: 1
-perm_num: 25
+perm_num: 6
 perm_forward: True
 perm_mirrored: True
 decode_ar: True

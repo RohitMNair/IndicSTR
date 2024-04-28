@@ -1213,7 +1213,7 @@ class MalayalamTokenizer:
         Returns:
         - str: the group formed
         """
-        assert len(d_pred) == len(d_max) == 2, \
+        assert len(d_pred) == len(d_max) == 3, \
             "Diacritic preds and max must contain 2 elements for 2 diacritics"
         
         grp = ""
@@ -1231,6 +1231,7 @@ class MalayalamTokenizer:
         grp += self.f_c_label_map[int(f_c_pred.item())]
         grp += self.d_c_label_map[int(d_pred[0].item())] if d_max[0] else ""
         grp += self.d_c_label_map[int(d_pred[1].item())] if d_max[1] else ""
+        grp += self.d_c_label_map[int(d_pred[2].item())] if d_max[2] else ""
                 
         return grp.replace(MalayalamTokenizer.BLANK, "").replace(MalayalamTokenizer.PAD, "") # remove all [B], [P] occurences
                 
@@ -1256,7 +1257,7 @@ class MalayalamTokenizer:
 
         # threshold filter for diacritic
         d_bin_mask = nn.functional.sigmoid(d_logits) > self.threshold
-        d_max, d_preds = torch.topk(d_bin_mask.int(), k= 2, dim= 2, largest= True) # top k requires scalar
+        d_max, d_preds = torch.topk(d_bin_mask.int(), k= 3, dim= 2, largest= True) # top k requires scalar
 
         # get the predictions
         pred_labels = []    
