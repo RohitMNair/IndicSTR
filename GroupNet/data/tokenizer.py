@@ -1229,9 +1229,94 @@ class MalayalamTokenizer:
                     and self.h_c_label_map[int(h_c_1_pred.item())] != MalayalamTokenizer.PAD else ""
         
         grp += self.f_c_label_map[int(f_c_pred.item())]
-        grp += self.d_c_label_map[int(d_pred[0].item())] if d_max[0] else ""
-        grp += self.d_c_label_map[int(d_pred[1].item())] if d_max[1] else ""
-        grp += self.d_c_label_map[int(d_pred[2].item())] if d_max[2] else ""
+        d1 = self.d_c_label_map[int(d_pred[0].item())] if d_max[0] else ""
+        d2 = self.d_c_label_map[int(d_pred[1].item())] if d_max[1] else ""
+        d3 = self.d_c_label_map[int(d_pred[2].item())] if d_max[2] else ""
+        # ['ാ', 'ി', 'ീ', 'ു', 'ൂ', 'ൃ', 'ൈ', 'ൗ', 'െ', 'േ', '഻', 'ു്'] 'ം', 'ഃ'
+        if d1 in unicodedata.normalize("NFKD",  'ം' + 'ഃ'):
+            if d2 in unicodedata.normalize("NFKD", 'ാ') and d3 in unicodedata.normalize("NFKD", 'െ'+ 'േ'):
+                grp += d3 + d2 + d1
+            elif d3 in unicodedata.normalize("NFKD", 'ാ') and d2 in unicodedata.normalize("NFKD", 'െ'+ 'േ'):
+                grp += d2 + d3 + d1
+            elif d2 == 'െ' and d3 == 'ൗ':
+                grp += d2 + d3 + d1
+            elif d3 == 'െ' and d2 == 'ൗ':
+                grp += d3 + d2 + d1
+            elif d3 == '' or d2 == '':
+                grp += d2 + d3 + d1
+            else:
+                grp += d1
+                    
+        elif d2 in unicodedata.normalize("NFKD",  'ം' + 'ഃ'):
+            if d1 in unicodedata.normalize("NFKD", 'ാ') and d3 in unicodedata.normalize("NFKD", 'െ'+ 'േ'):
+                grp += d3 + d1 + d2
+            elif d3 in unicodedata.normalize("NFKD", 'ാ') and d1 in unicodedata.normalize("NFKD", 'െ'+ 'േ'):
+                grp += d1 + d3 + d2
+            elif d1 == 'െ' and d3 == 'ൗ':
+                grp += d1 + d3 + d2
+            elif d3 == 'െ' and d1 == 'ൗ':
+                grp += d3 + d1 + d2
+            elif d3 == '' or d1 == '':
+                grp += d1 + d3 + d2
+            else:
+                grp += d1
+
+        elif d3 in unicodedata.normalize("NFKD",  'ം' + 'ഃ'):
+            if d1 in unicodedata.normalize("NFKD", 'ാ') and d2 in unicodedata.normalize("NFKD", 'െ'+ 'േ'):
+                grp += d2 + d1 + d3
+            elif d2 in unicodedata.normalize("NFKD", 'ാ') and d1 in unicodedata.normalize("NFKD", 'െ'+ 'േ'):
+                grp += d1 + d2 + d3
+            elif d1 == 'െ' and d2 == 'ൗ':
+                grp += d1 + d2 + d3
+            elif d2 == 'െ' and d1 == 'ൗ':
+                grp += d2 + d1 + d3
+            elif d2 == '' or d1 == '':
+                grp += d1 + d2 + d3
+            else:
+                grp += d1
+        
+        elif d1 == '':
+            if d2 in unicodedata.normalize("NFKD", 'ാ') and d3 in unicodedata.normalize("NFKD", 'െ'+ 'േ'):
+                grp += d3 + d2
+            elif d3 in unicodedata.normalize("NFKD", 'ാ') and d2 in unicodedata.normalize("NFKD", 'െ'+ 'േ'):
+                grp += d2 + d3 # handle the null case
+            elif d2 == 'െ' and d3 == 'ൗ':
+                grp += d2 + d3
+            elif d3 == 'െ' and d2 == 'ൗ':
+                grp += d3 + d2
+            elif d3 == '' or d2 == '':
+                grp += d2 + d3
+            else:
+                grp += d2
+
+        elif d2 == '':
+            if d1 in unicodedata.normalize("NFKD", 'ാ') and d3 in unicodedata.normalize("NFKD", 'െ'+ 'േ'):
+                grp += d3 + d1
+            elif d3 in unicodedata.normalize("NFKD", 'ാ') and d1 in unicodedata.normalize("NFKD", 'െ'+ 'േ'):
+                grp += d1 + d3 # handle the null case
+            elif d1 == 'െ' and d3 == 'ൗ':
+                grp += d2 + d3
+            elif d3 == 'െ' and d1 == 'ൗ':
+                grp += d3 + d1
+            elif d3 == '' or d1 == '':
+                grp += d1 + d3
+            else:
+                grp += d1
+        elif d3 == '':
+            if d2 in unicodedata.normalize("NFKD", 'ാ') and d1 in unicodedata.normalize("NFKD", 'െ'+ 'േ'):
+                grp += d1 + d2
+            elif d1 in unicodedata.normalize("NFKD", 'ാ') and d2 in unicodedata.normalize("NFKD", 'െ'+ 'േ'):
+                grp += d2 + d1 # handle the null case
+            elif d2 == 'െ' and d1 == 'ൗ':
+                grp += d2 + d1
+            elif d1 == 'െ' and d2 == 'ൗ':
+                grp += d1 + d2
+            elif d1 == '' or d2 == '':
+                grp += d2 + d1
+            else:
+                grp += d2
+        else:
+            grp += d1
                 
         return grp.replace(MalayalamTokenizer.BLANK, "").replace(MalayalamTokenizer.PAD, "") # remove all [B], [P] occurences
                 
