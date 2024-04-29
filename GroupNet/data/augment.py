@@ -102,9 +102,9 @@ def rand_augment_transform(magnitude=5, num_layers=3):
     hparams = {
         'rotate_deg': 30,
         'shear_x_pct': 0.9,
-        'shear_y_pct': 0.2,
-        'translate_x_pct': 0.10,
-        'translate_y_pct': 0.30,
+        'shear_y_pct': 0.9,
+        'translate_x_pct': 0.3,
+        'translate_y_pct': 0.3,
     }
     ra_ops = auto_augment.rand_augment_ops(magnitude, hparams=hparams, transforms=_RAND_TRANSFORMS)
     # Supply weights to disable replacement in random selection (i.e. avoid applying the same op twice)
