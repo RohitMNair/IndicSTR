@@ -21,6 +21,8 @@ perm_mirrored: True
 decode_ar: True
 refine_iters: 1
 # tokenizer args
+num_h_c: 3
+num_d_c: 3
 tokenizer: MalayalamPARSeqTokenizer
 threshold: 0.5
 max_grps: 25

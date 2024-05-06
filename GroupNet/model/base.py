@@ -189,7 +189,7 @@ class PARSeqBaseSystem(GrpNetBaseSystem):
         self.text_embed = TokenEmbedding(
                             h_c_charset_size= self.num_h_c_classes,
                             f_c_charset_size= self.num_f_c_classes,
-                            d_c_charset_size= self.num_d_c_classes,
+                            d_c_charset_size= self.num_d_c_classes + 1, # to handle blank
                             embed_dim= self.hidden_size,
                             num_h_c= self.num_h_c,
                             num_d_c= self.num_d_c,
@@ -351,7 +351,11 @@ class PARSeqBaseSystem(GrpNetBaseSystem):
                         h_c_ctx[i][:, j] = h_c_logit[i].squeeze().argmax(-1)
                     f_c_ctx[:, j] = f_c_logit.squeeze().argmax(-1)
                     vals, indices = torch.topk(d_c_logit.squeeze(), k= self.num_d_c)
-                    for i in range(self.num_h_c):
+                    vals = nn.functional.sigmoid(vals) < self.threshold
+                    indices[vals] = 0 # below threshold will hold value 0 for BLANK
+                    indices[indices != 0] += 1 # increment other values to account for BLANK
+                    
+                    for i in range(self.num_d_c):
                         d_c_ctx[0][:, j] = indices[:, i]
                     # Efficient batch decoding: If all output words have at least one EOS token, end decoding.
                     # if (tgt_in == self.eos_id).any(dim=-1).all():
@@ -383,6 +387,9 @@ class PARSeqBaseSystem(GrpNetBaseSystem):
                 h_c_ctx = [torch.cat([bos_h_c, h_c_logits[:, :-1].argmax(-1)], dim= 1) for h_c_logits in logits[0]]
                 f_c_ctx = torch.cat([bos_f_c, logits[1][:, :-1].argmax(-1)], dim= 1)
                 vals, indices = torch.topk(logits[-1][:, :-1], k=self.num_d_c)
+                vals = nn.functional.sigmoid(vals) < self.threshold
+                indices[vals] = 0 # below threshold will hold value 0 for BLANK
+                indices[indices != 0] += 1 # increment other values to account for BLANK
                 d_c_ctx = [torch.cat([bos_d_c, indices[:,:,i]], dim= -1) for i in range(self.num_d_c)]
 
                 # ctx_padding_mask = ((tgt_in == self.eos_id).int().cumsum(-1) > 0)  # mask tokens beyond the first EOS token.
@@ -510,6 +517,9 @@ class PARSeqBaseSystem(GrpNetBaseSystem):
         for i, perm in enumerate(tgt_perms):
             tgt_mask, query_mask = self.generate_attn_masks(perm)
             vals, indices = torch.topk(d_c_in, k= self.num_d_c)
+            vals = nn.functional.sigmoid(vals) != 1
+            indices[vals] = 0 # below threshold will hold value 0 for BLANK
+            indices[indices != 0] += 1 # increment other values to account for BLANK
             out = self.decode(h_c_ctx= h_c_in, f_c_ctx= f_c_in, 
                               d_c_ctx= [indices[:,:,i] for i in range(self.num_d_c)], # ignore the additional target for EOS
                               memory= memory, query_mask=query_mask, context_key_padding_mask= ctx_padding_mask)

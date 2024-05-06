@@ -363,7 +363,7 @@ class HindiPARSeq(HindiBaseSystem):
                                   torch.zeros(batch_size, self.max_grps + 2, device= self.device, dtype= torch.long),
                                   torch.zeros(batch_size, self.max_grps + 2, device= self.device, dtype= torch.long),
                                   torch.zeros(batch_size, self.max_grps + 2, device= self.device, dtype= torch.long),
-                                  torch.zeros(batch_size, self.max_grps + 2, self.num_d_classes, device= self.device), # we don't need PAD
+                                  torch.zeros(batch_size, self.max_grps + 2, self.num_d_classes, device= self.device),
                                 )
         
         n_grps = [self.max_grps + 2 for _ in range(batch_size)]
