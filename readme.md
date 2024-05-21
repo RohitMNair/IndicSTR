@@ -10,30 +10,16 @@ Project uses Hydra, read more about [Hydra](https://hydra.cc/docs/intro/). The p
 CharEmbed comprises embedding models tailored to identify a single character group present within images containing a single character group. These models are utilized to obtain character embeddings.
 GroupNet is a collection of Scene Text Recognition models. It is designed to accurately decipher the complete textual content present within an image.
 
-<div style="display: flex; justify-content: space-around; align-items: center;">
-  <figure style="margin: 10px; text-align: center;">
-    <img src='assets/embeddingNet.png' alt='Embedding Net' style="max-width: 100%; height: auto; object-fit: contain;">
-    <figcaption>Figure 1: Embedding Net</figcaption>
-  </figure>
-  <figure style="margin: 10px; text-align: center;">
-    <img src='assets/GroupNets-overview.png' alt='Group Nets Overview' style="max-width: 100%; height: auto; object-fit: contain;">
-    <figcaption>Figure 2: Group Nets Overview</figcaption>
-  </figure>
-</div>
+| Embedding Net | Group Nets Overview |
+|---------------|---------------------|
+| <img src='assets/embeddingNet.png' alt='Embedding Net' style='background-color: white; max-width: 100%; height: auto; object-fit: contain;'> | <img src='assets/GroupNets-overview.png' alt='Group Nets Overview' style='background-color: white; max-width: 100%; height: auto; object-fit: contain;'> |
 
 ## Datasets
 Training data has been generated synthetically using [SynthTIGER](https://github.com/clovaai/synthtiger). Steps to generate data can be found in their repo. [IndicSTR12](https://iiitaphyd-my.sharepoint.com/:f:/g/personal/harsh_lunia_research_iiit_ac_in/ElB2rbzq2xtJtrcFWO3azvcBgX5qqNAX_CCluTC4gSHEDA?e=86YzEr) has been used for evaluation. 
 
-<div style="display: flex; justify-content: space-around; align-items: center;">
-  <figure style="margin: 10px; text-align: center;">
-    <img src='assets/MalSynthSamples.png' alt='Malayalam sythetic images' style="max-width: 100%; height: auto; object-fit: contain;">
-    <figcaption>Figure 3: Malayalam sythetic images</figcaption>
-  </figure>
-  <figure style="margin: 10px; text-align: center;">
-    <img src='assets/HiSynthSamples.png' alt='Hindi synthetic samples' style="max-width: 100%; height: auto; object-fit: contain;">
-    <figcaption>Figure 4: Hindi synthetic samples</figcaption>
-  </figure>
-</div>
+| Malayalam Synthetic Images | Hindi Synthetic Samples |
+|----------------------------|-------------------------|
+| ![Malayalam sythetic images](assets/MalSynthSamples.png) | ![Hindi synthetic samples](assets/HiSynthSamples.png) |
 
 ### Data Preparation
 Dataloaders expect data to be in [LMDB](https://lmdb.readthedocs.io/en/release/), to convert a dataset to LMDB run:
